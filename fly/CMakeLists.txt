@@ -105,17 +105,19 @@ include_directories(
 # )
 
 ## Declare a cpp executable
-add_executable(fly_node src/fly_node.cpp)
-
+add_executable(takeoff src/takeoff.cpp)
+add_executable(land src/land.cpp)
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
 # add_dependencies(fly_node fly_generate_messages_cpp)
 
 ## Specify libraries to link a library or executable target against
- target_link_libraries(fly_node
+ target_link_libraries(land
    ${catkin_LIBRARIES}
  )
-
+target_link_libraries(takeoff
+   ${catkin_LIBRARIES}
+ )
 #############
 ## Install ##
 #############
