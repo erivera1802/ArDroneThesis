@@ -1,0 +1,7 @@
+set(_CATKIN_CURRENT_PACKAGE "stream")
+set(stream_MAINTAINER "edrone <edrone@todo.todo>")
+set(stream_DEPRECATED "")
+set(stream_VERSION "0.0.0")
+set(stream_BUILD_DEPENDS "ardrone_autonomy" "cv_bridge" "geometry_msgs" "image_transport" "roscpp" "sensor_msgs" "std_msgs" "tf")
+set(stream_RUN_DEPENDS "ardrone_autonomy" "cv_bridge" "geometry_msgs" "image_transport" "roscpp" "sensor_msgs" "std_msgs" "tf")
+set(stream_BUILDTOOL_DEPENDS "catkin")
