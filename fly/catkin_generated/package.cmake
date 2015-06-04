@@ -1,7 +1,0 @@
-set(_CATKIN_CURRENT_PACKAGE "fly")
-set(fly_MAINTAINER "edrone <edrone@todo.todo>")
-set(fly_DEPRECATED "")
-set(fly_VERSION "0.0.0")
-set(fly_BUILD_DEPENDS "ardrone_autonomy" "geometry_msgs" "roscpp" "std_msgs" "tf")
-set(fly_RUN_DEPENDS "ardrone_autonomy" "geometry_msgs" "roscpp" "std_msgs" "tf")
-set(fly_BUILDTOOL_DEPENDS "catkin")
