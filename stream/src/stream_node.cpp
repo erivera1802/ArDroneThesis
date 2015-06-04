@@ -45,11 +45,14 @@ public:
     }
 
     // Draw an example circle on the video stream
-    if (cv_ptr->image.rows > 60 && cv_ptr->image.cols > 60)
-      cv::circle(cv_ptr->image, cv::Point(50, 50), 10, CV_RGB(255,0,0));
-
+    //if (cv_ptr->image.rows > 60 && cv_ptr->image.cols > 60)
+    // cv::circle(cv_ptr->image, cv::Point(50, 50), 10, CV_RGB(255,0,0));
+	cv::Mat img_hsv;
+	cv::cvtColor(cv_ptr->image,img_hsv,CV_BGR2HSV);
     // Update GUI Window
-    cv::imshow(OPENCV_WINDOW, cv_ptr->image);
+    //cv::imshow(OPENCV_WINDOW, cv_ptr->image);
+	cv::imshow(OPENCV_WINDOW, img_hsv);
+
     cv::waitKey(3);
     
     // Output modified video stream
