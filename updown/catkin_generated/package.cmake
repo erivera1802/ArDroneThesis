@@ -1,0 +1,7 @@
+set(_CATKIN_CURRENT_PACKAGE "updown")
+set(updown_MAINTAINER "edrone <edrone@todo.todo>")
+set(updown_DEPRECATED "")
+set(updown_VERSION "0.0.0")
+set(updown_BUILD_DEPENDS "ardrone_autonomy" "geometry_msgs" "roscpp" "std_msgs" "tf")
+set(updown_RUN_DEPENDS "ardrone_autonomy" "geometry_msgs" "roscpp" "std_msgs" "tf")
+set(updown_BUILDTOOL_DEPENDS "catkin")
