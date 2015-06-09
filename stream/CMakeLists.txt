@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   tf
 )
+find_package(OpenCV REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -118,6 +119,13 @@ include_directories(
  target_link_libraries(stream_node
    ${catkin_LIBRARIES}
  )
+target_link_libraries(stream_node
+   ${OpenCV_LIBS}
+ )
+
+
+
+##target_link_libraries(open ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} opencv_nonfree  )
 
 #############
 ## Install ##

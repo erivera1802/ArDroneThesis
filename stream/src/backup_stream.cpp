@@ -4,15 +4,7 @@
 #include <sensor_msgs/image_encodings.h>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
-#include <stdio.h>
-#include <iostream>
-#include "opencv2/core/core.hpp"
-#include "opencv2/features2d/features2d.hpp"
-#include "opencv2/nonfree/features2d.hpp"
-#include "opencv2/nonfree/nonfree.hpp"
 
-using namespace cv;
-using namespace std;
 static const std::string OPENCV_WINDOW = "Image window";
 class ImageConverter
 {
@@ -25,17 +17,17 @@ public:
   ImageConverter()
     : it_(nh_)
   {
-    // Subscribe to input video feed and publish output video feed
+    // Subscrive to input video feed and publish output video feed
     image_sub_ = it_.subscribe("/ardrone/front/image_raw", 1, 
       &ImageConverter::imageCb, this);
     image_pub_ = it_.advertise("/image_converter/output_video", 1);
 
-    namedWindow(OPENCV_WINDOW);
+    cv::namedWindow(OPENCV_WINDOW);
   }
 
   ~ImageConverter()
   {
-    destroyWindow(OPENCV_WINDOW);
+    cv::destroyWindow(OPENCV_WINDOW);
   }
 
   void imageCb(const sensor_msgs::ImageConstPtr& msg)
@@ -53,28 +45,26 @@ public:
 
     // Draw an example circle on the video stream
 
-	Mat img_hsv;
+	//cv::Mat img_hsv;
 	//cv::Mat img_gauss;
 	//cv::Mat img_thr;
 	//cv::GaussianBlur(cv_ptr->image, img_gauss, cv::Size(9,9), 1.5, 1.5);
-	cvtColor(cv_ptr->image,img_hsv,CV_BGR2GRAY);
+	//cv::cvtColor(img_gauss,img_hsv,CV_BGR2HSV);
 	//cv::inRange(img_hsv, cv::Scalar(60, 30, 20), cv::Scalar(140, 170, 128), img_hsv);
     // Update GUI Window
     //cv::imshow(OPENCV_WINDOW, cv_ptr->image);
 	//cv::imshow(OPENCV_WINDOW, img_hsv);
-	imshow(OPENCV_WINDOW, img_hsv);
-	int minHessian = 400;
-	//SurfFeatureDetector detector( minHessian );
+	//cv::imshow(OPENCV_WINDOW, img_hsv);
+		int minHessian = 400;
+		cv::SurfFeatureDetector detector( minHessian );
+		std::vector<KeyPoint> keypoints_2;
+		cv::detector.detect( cv_ptr->image, keypoints_2 );
+		cv::Mat img_keypoints_2;
+		cv::drawKeypoints( imgOriginal, keypoints_2, img_keypoints_2, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT );
+		
+	 	imshow("Keypoints 2", img_keypoints_2 );
 
-	Ptr<FeatureDetector> detector = new SurfFeatureDetector;
-	std::vector<KeyPoint> keypoints_1;
-	detector->detect(img_hsv, keypoints_1 );
-	
-	cv::Mat img_keypoints_1;
-	drawKeypoints( img_hsv, keypoints_1, img_keypoints_1, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
-	imshow("Keypoints 1", img_keypoints_1 );
-
-    	waitKey(3);
+    cv::waitKey(3);
     
     // Output modified video stream
     image_pub_.publish(cv_ptr->toImageMsg());
