@@ -107,7 +107,9 @@ int main(int argc, char** argv)
 #include <image_transport/image_transport.h>
 #include <sensor_msgs/image_encodings.h>
 #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 #include <cv_bridge/cv_bridge.h>
+//Values for Trackbar, Hue, Saturation Value
 int iLowH=0;
 int iHighH=179;
 int iLowS=0;
@@ -118,9 +120,10 @@ int iHighV=255;
 
 void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 {
+	//Communicating between ROS an OpenCV
 	cv_bridge::CvImagePtr cv_ptr;
 
-	cv::namedWindow("Control", CV_WINDOW_AUTOSIZE); //create a window called "Control"
+	cv::namedWindow("Control", CV_WINDOW_AUTOSIZE); 
 	
 	cv::Mat img_thr;
 
@@ -133,9 +136,10 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 		cvCreateTrackbar("HighS", "Control", &iHighS, 255); 
 		cvCreateTrackbar("LowV", "Control", &iLowV, 255); 
 		cvCreateTrackbar("HighV", "Control", &iHighV, 255);
+		//Thresholding
 		cv::cvtColor(cv_ptr->image,img_thr,CV_BGR2HSV); 
-		cv::inRange(img_thr, cv::Scalar(iLowH,iLowS,iLowV), cv::Scalar(iHighH,iHighS,iHighV), img_thr); //Threshold the image
-		//cv::inRange(cv_ptr->image, cv::Scalar(0,0,0), cv::Scalar(180,256,256), img_thr); 
+		cv::inRange(img_thr, cv::Scalar(iLowH,iLowS,iLowV), cv::Scalar(iHighH,iHighS,iHighV), img_thr); 
+		//Voilá
 		cv::imshow("view",img_thr);
 		cv::imshow("Control",cv_ptr->image);
 		cv::waitKey(30);
@@ -149,14 +153,16 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 
 int main(int argc, char **argv)
 {
-	  ros::init(argc, argv, "image_listener");
-	  ros::NodeHandle nh;
-	  cv::namedWindow("view");
-	  cv::startWindowThread();
-	  image_transport::ImageTransport it(nh);
-	  image_transport::Subscriber sub = it.subscribe("/ardrone/front/image_raw", 1, imageCallback);
-	  ros::spin();
-	  cv::destroyWindow("view");
+	//Initializing ROS
+	ros::init(argc, argv, "image_listener");
+	ros::NodeHandle nh;
+	cv::namedWindow("view");
+	cv::startWindowThread();
+	//Subscribing to ardrone camera node
+	image_transport::ImageTransport it(nh);
+	image_transport::Subscriber sub = it.subscribe("/ardrone/front/image_raw", 1, imageCallback);
+	ros::spin();
+	cv::destroyWindow("view");
 }
 
 

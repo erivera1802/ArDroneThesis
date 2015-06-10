@@ -10,7 +10,7 @@
 #include "opencv2/features2d/features2d.hpp"
 #include "opencv2/nonfree/features2d.hpp"
 #include "opencv2/nonfree/nonfree.hpp"
-
+/*
 using namespace cv;
 using namespace std;
 static const std::string OPENCV_WINDOW = "Image window";
@@ -87,4 +87,58 @@ int main(int argc, char** argv)
   ImageConverter ic;
   ros::spin();
   return 0;
+}
+
+*/
+using namespace cv;
+using namespace std;
+
+void imageCallback(const sensor_msgs::ImageConstPtr& msg)
+{
+	//Communicating between ROS an OpenCV
+	cv_bridge::CvImagePtr cv_ptr;
+
+	cv::namedWindow("Control", CV_WINDOW_AUTOSIZE); 
+	
+	cv::Mat img_thr;
+
+	  try
+	  {
+		cv_ptr=cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+		//Thresholding
+		cv::cvtColor(cv_ptr->image,img_thr,CV_BGR2GRAY); 
+		//Voilá
+		int minHessian = 400;
+		//SurfFeatureDetector detector( minHessian );
+
+		Ptr<FeatureDetector> detector = new SurfFeatureDetector;
+		std::vector<KeyPoint> keypoints_1;
+		detector->detect(img_thr, keypoints_1 );
+	
+		cv::Mat img_keypoints_1;
+		drawKeypoints( img_thr, keypoints_1, img_keypoints_1, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
+		imshow("view", img_keypoints_1 );
+		cv::imshow("Control",cv_ptr->image);
+		cv::waitKey(30);
+	  }
+	  catch (cv_bridge::Exception& e)
+	  {
+	    ROS_ERROR("Could not convert from '%s' to 'bgr8'.", msg->encoding.c_str());
+	  }
+	
+}
+
+
+int main(int argc, char **argv)
+{
+	//Initializing ROS
+	ros::init(argc, argv, "image_listener");
+	ros::NodeHandle nh;
+	cv::namedWindow("view");
+	cv::startWindowThread();
+	//Subscribing to ardrone camera node
+	image_transport::ImageTransport it(nh);
+	image_transport::Subscriber sub = it.subscribe("/ardrone/front/image_raw", 1, imageCallback);
+	ros::spin();
+	cv::destroyWindow("view");
 }
