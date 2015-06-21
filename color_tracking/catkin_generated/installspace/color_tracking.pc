@@ -1,0 +1,8 @@
+prefix=/home/edrone/catkin_ws/install
+
+Name: color_tracking
+Description: Description of color_tracking
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/edrone/catkin_ws/install/lib 
+Requires: 
