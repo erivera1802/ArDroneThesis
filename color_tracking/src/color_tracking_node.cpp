@@ -9,23 +9,27 @@
 #include <std_msgs/Empty.h>
 #include <std_msgs/String.h>
 #include <sstream>
+#include <fstream>
 using namespace cv;
+using namespace std;
 //Values for Trackbar, Hue, Saturation Value
-int iLowH=175;
+int iLowH=163;
 int iHighH=179;
-int iLowS=148;
-int iHighS=199;
-int iLowV=87;
-int iHighV=161;
+int iLowS=151;
+int iHighS=201;
+int iLowV=135;
+int iHighV=181;
 
 int posY,posZ;
-float ey,ez,ex;
+float ey,ez,ex,dey,eypa,dex,expa,dez,ezpa,iex,iey,iez,uy,ux,uz;
 
 geometry_msgs::Twist twist_msg;
 std_msgs::Empty emp_msg;
 
 	void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 	{
+		ofstream myfile("/home/edrone/example.txt",ios_base::app);
+		
 		ros::Rate loop_rate(50);
 		int count=0;
 		double dM01;
@@ -77,16 +81,34 @@ std_msgs::Empty emp_msg;
 				pt.y=posZ;
 				big=dArea/40000;  
 				circle(cv_ptr->image, pt, big, Scalar(0,0,255), 1, 8, 0);
-				ey=(319-posY)/319.0;
-				ez=(179-posZ)/179.0;
+				ey=(319-posY)/320.0;
+				ez=(179-posZ)/180.0;
 				ex=(40.0-big)/40.0;
-				if(ex<-1.0)
+				dey=-(ey-eypa)/1.0;
+				dez=-(ez-ezpa)/1.0;
+				dex=-(ex-expa)/1.0;
+				iey=iey+ey;
+				iez=iez+ez;
+				iex=iex+ex;
+				uy=ey+dey;
+				ux=ex+dex;
+				uz=ez+dez;
+				if(abs(uy)>1.0)
 				{
-					ex=-1.0;				
+					uy=uy/abs(uy);				
 				}
-				ROS_INFO("Ball Position:[%f,%f,%f]",ey,ez,ex);
-				twist_msg.angular.z=ey;
-				//ROS_INFO("%d", msg.data);							
+				if(abs(ux)>1.0)
+				{
+					ux=ux/abs(ux);				
+				}
+				if(abs(uz)>1.0)
+				{
+					uz=uz/abs(uz);				
+				}
+				ROS_INFO("Ball Position:[%f,%f,%f,%f]",ex,dex,iex,ux);
+				myfile << uy << "\n";
+				twist_msg.angular.z=uy;
+				twist_msg.linear.x=ux;							
 				pub.publish(twist_msg);
 				ros::spinOnce();
 
@@ -110,6 +132,9 @@ std_msgs::Empty emp_msg;
 			cv::imshow("view",img_thr);
 			cv::imshow("Control",cv_ptr->image);
 			cv::waitKey(30);
+			eypa=ey;
+			expa=ex;
+			ezpa=ez;
 			ros::spin();
 			
 		  }
@@ -129,12 +154,18 @@ int main(int argc, char **argv)
 	ros::Rate loop_rate(50);	
 	cv::namedWindow("view");
 	cv::startWindowThread();
-	twist_msg.linear.x=0.0;
+
 	twist_msg.linear.y=0.0;
 	twist_msg.angular.z=0.0;
-	twist_msg.angular.x=0.0;
 	twist_msg.angular.y=0.0;
-		
+	twist_msg.angular.x=0.0;
+	eypa=0.0;
+	expa=0.0;
+	ezpa=0.0;
+	iex=0.0;
+	iey=0.0;
+	iez=0.0;
+			
 
 
 
