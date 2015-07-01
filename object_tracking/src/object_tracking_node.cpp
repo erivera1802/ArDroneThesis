@@ -1,0 +1,225 @@
+#include <ros/ros.h>
+#include <image_transport/image_transport.h>
+#include <sensor_msgs/image_encodings.h>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <cv_bridge/cv_bridge.h>
+#include <geometry_msgs/Twist.h>
+#include <std_msgs/Empty.h>
+#include <std_msgs/String.h>
+#include <sstream>
+
+#include <ros/ros.h>
+#include <image_transport/image_transport.h>
+#include <cv_bridge/cv_bridge.h>
+#include <stdio.h>
+#include <iostream>
+#include "opencv2/core/core.hpp"
+#include "opencv2/features2d/features2d.hpp"
+#include "opencv2/nonfree/features2d.hpp"
+#include "opencv2/nonfree/nonfree.hpp"
+#include <ros/package.h>
+#include "opencv2/calib3d/calib3d.hpp"
+using namespace cv;
+using namespace std;
+//Values for Trackbar, Hue, Saturation Value
+int iLowH=174;
+int iHighH=179;
+int iLowS=136;
+int iHighS=202;
+int iLowV=40;
+int iHighV=95;
+float ey,ez,ex;
+
+geometry_msgs::Twist twist_msg;
+std_msgs::Empty emp_msg;
+
+	void imageCallback(const sensor_msgs::ImageConstPtr& msg)
+	{
+		ros::Rate loop_rate(50);
+		int count=0;
+		double dM01;
+		double dM10;
+		double dArea;
+		int big;
+		Point pt;
+		ros::NodeHandle nh;
+		ros::NodeHandle neu;
+		ros::Publisher pub;
+		ros::Publisher pub_empty_land;
+		ros::Publisher pub_twist;
+		ros::Publisher chatter_pub=neu.advertise<std_msgs::String>("chatter", 1000);
+		pub_empty_land = neu.advertise<std_msgs::Empty>("/ardrone/land", 1); /* Message queue length is just 1 */
+		pub = neu.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
+	
+		//Communicating between ROS an OpenCV
+		cv_bridge::CvImagePtr cv_ptr;
+
+		cv::namedWindow("Control", CV_WINDOW_AUTOSIZE); 
+	
+		cv::Mat img_thr;
+
+		  try
+		  {
+
+
+				std::string image = ros::package::getPath("stream") + "/src/box.jpg";
+				cv_ptr=cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+				cv::Mat img2;
+				//Thresholding
+				cv::cvtColor(cv_ptr->image,img2,CV_BGR2GRAY);
+				Mat img1 = imread(image, CV_LOAD_IMAGE_GRAYSCALE );
+				//imshow("control",img1);
+				if( img1.empty() ) {
+		 		printf("Error occured, image not read correctly \n");
+
+				}
+				//cv::imshow("view",img_thr); 
+				//Voilá
+				OrbFeatureDetector detector;
+			    	vector<KeyPoint> keypoints1, keypoints2;
+				detector.detect(img1, keypoints1);
+				    // computing descriptors
+				OrbDescriptorExtractor extractor;
+				Mat descriptors1, descriptors2;
+				extractor.compute(img1, keypoints1, descriptors1);
+
+				BFMatcher matcher(NORM_HAMMING,false);
+		    		//vector<DMatch> matches12,matches21;
+				vector< vector< DMatch > > matches;
+				vector<DMatch> good_matches;
+		
+
+		
+				Point center;
+				DMatch Forward,Backward;
+				std::vector<Point2f> obj;
+				std::vector<Point2f> scene;
+				float posY=0.0;
+				float posZ=0.0;
+				
+		
+				detector.detect(img2, keypoints2);
+			    	// computing descriptors
+			    	extractor.compute(img2, keypoints2, descriptors2);
+		
+		  		//std::vector< DMatch > matches;
+
+				matcher.knnMatch(descriptors1, descriptors2, matches, 2);
+				for (int i = 0; i < matches.size(); ++i)
+				{
+				    const float ratio = 0.8; // As in Lowe's paper; can be tuned
+				    if (matches[i][0].distance < ratio * matches[i][1].distance)
+				    {
+					good_matches.push_back(matches[i][0]);
+				    }
+				}
+				for( int i = 0; i < good_matches.size(); i++ )
+				{
+				  //-- Get the keypoints from the good matches
+				scene.push_back( keypoints2[ good_matches[i].queryIdx ].pt );
+				obj.push_back( keypoints1[ good_matches[i].trainIdx ].pt );
+				posY=posY+scene[i].x;
+				posZ=posZ+scene[i].y;
+				}
+				//if(good_matches.size()>3)
+				//{
+				/*Mat H = findHomography( obj, scene, CV_RANSAC );
+
+				//-- Get the corners from the image_1 ( the object to be "detected" )
+				std::vector<Point2f> obj_corners(4);
+				obj_corners[0] = cvPoint(0,0); 
+				obj_corners[1] = cvPoint( img1.cols, 0 );
+				obj_corners[2] = cvPoint( img1.cols, img1.rows ); 
+				obj_corners[3] = cvPoint( 0, img1.rows );
+				std::vector<Point2f> scene_corners(4);
+				
+				perspectiveTransform( obj_corners, scene_corners, H);*/
+
+  //-- Draw lines between the corners (the mapped object in the scene - image_2 )
+				  
+					posY=posY/(good_matches.size());
+					posZ=posZ/(good_matches.size());
+					//printf("%f,%f \n",posY,posZ);
+			
+					center.x=posY;
+					center.y=posZ;
+					Mat img_matches;
+
+		    			circle( img2, center, 32.0, Scalar( 0, 0, 255 ), 1, 8 );
+					cv::Mat img_keypoints_2;
+					 //show the frame in "MyVideo" window
+		  		  drawMatches( img1, keypoints1, img2, keypoints2,
+			      good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),
+			       vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
+		
+		
+				good_matches.clear();
+				obj.clear();
+				scene.clear();
+				//line( img_matches, scene_corners[0] + Point2f( img1.cols, 0), scene_corners[1] + Point2f( img1.cols, 0), Scalar(0, 255, 0), 4 );
+				  //line( img_matches, scene_corners[1] + Point2f( img1.cols, 0), scene_corners[2] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4 );
+			//	  line( img_matches, scene_corners[2] + Point2f( img1.cols, 0), scene_corners[3] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4 );
+			//	  line( img_matches, scene_corners[3] + Point2f( img1.cols, 0), scene_corners[0] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4);
+				//cv::Mat img_keypoints_2;
+				//drawKeypoints( img2, keypoints2, img_keypoints_2, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
+				
+				
+				imshow("view", img_matches );
+				//}
+
+				ey=(319-posY)/319.0;
+				ez=(179-posZ)/179.0;
+				//ROS_INFO("Ball Position:[%f,%f]",ey,ez);
+				printf("Pos:[%f,%f], Error:[%f,%f] \n",posY,posZ,ey,ez);
+
+				twist_msg.angular.z=ey;
+						
+				pub.publish(twist_msg);
+				ros::spinOnce();
+				posY=0.0;
+				posZ=0.0;
+		
+				  
+
+		
+		
+			//cv::imshow("view",img_keypoints_2);
+			cv::waitKey(30);
+			ros::spin();
+			
+		  }
+		  catch (cv_bridge::Exception& e)
+		  {
+		    ROS_ERROR("Could not convert from '%s' to 'bgr8'.", msg->encoding.c_str());
+		  }
+	
+	
+	}
+
+int main(int argc, char **argv)
+{
+	//Initializing ROS
+	ros::init(argc, argv, "tracker");
+	ros::NodeHandle nh;
+	ros::Rate loop_rate(50);	
+	cv::namedWindow("view");
+	cv::startWindowThread();
+	twist_msg.linear.x=0.0;
+	twist_msg.linear.y=0.0;	
+	twist_msg.angular.z=0.0;
+	twist_msg.angular.y=0.0;
+		
+
+
+
+	//Subscribing to ardrone camera node
+	image_transport::ImageTransport it(nh);
+	image_transport::Subscriber sub = it.subscribe("/ardrone/image_raw", 1, imageCallback);
+	ros::spin();
+	cv::destroyWindow("view");
+}
+
+
+
+
