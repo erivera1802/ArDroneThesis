@@ -1,5 +1,4 @@
 
-
 #include <ros/ros.h>
 #include <image_transport/image_transport.h>
 #include <sensor_msgs/image_encodings.h>
@@ -42,9 +41,12 @@ std_msgs::Empty emp_msg;
 		Point pt;
 		ros::NodeHandle nh;
 		ros::NodeHandle neu;
+		ros::Publisher pub;
 		ros::Publisher pub_empty_land;
+		ros::Publisher pub_twist;
 		ros::Publisher pub_point=neu.advertise<geometry_msgs::Point>("color_position",100);
 		pub_empty_land = neu.advertise<std_msgs::Empty>("/ardrone/land", 1); /* Message queue length is just 1 */
+		pub = neu.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
 	
 		//Communicating between ROS an OpenCV
 		cv_bridge::CvImagePtr cv_ptr;
@@ -87,7 +89,35 @@ std_msgs::Empty emp_msg;
 				pospt.z=big;
 			
 				pub_point.publish(pospt);
-
+				ey=(319-posY)/320.0;
+				ez=(179-posZ)/180.0;
+				ex=(40.0-big)/40.0;
+				dey=-(ey-eypa)/1.0;
+				dez=-(ez-ezpa)/1.0;
+				dex=-(ex-expa)/1.0;
+				iey=iey+ey;
+				iez=iez+ez;
+				iex=iex+ex;
+				uy=ey+dey;
+				ux=ex/4+dex;
+				uz=ez+dez;
+				if(abs(uy)>1.0)
+				{
+					uy=uy/abs(uy);				
+				}
+				if(abs(ux)>1.0)
+				{
+					ux=ux/abs(ux);				
+				}
+				if(abs(uz)>1.0)
+				{
+					uz=uz/abs(uz);				
+				}
+				ROS_INFO("Ball Position:[%f,%f,%f,%f]",ex,dex,iex,ux);
+				myfile << uy << "\n";
+				twist_msg.angular.z=uy;
+				twist_msg.linear.x=ux;							
+				//pub.publish(twist_msg);
 				ros::spinOnce();
 
 		
@@ -100,15 +130,19 @@ std_msgs::Empty emp_msg;
 				ROS_INFO("Landing!!!!");
 				pt.x=posY;
 				pt.y=posZ;
+				ey=(319-posY)/319.0;
+				ez=(179-posZ)/179.0;  
 				circle(cv_ptr->image, pt, 50, Scalar(0,0,255), 1, 8, 0);
-				pub_empty_land.publish(emp_msg);
+				//pub_empty_land.publish(emp_msg);
 			}
 		
 		
 			cv::imshow("view",img_thr);
 			cv::imshow("Control",cv_ptr->image);
 			cv::waitKey(30);
-
+			eypa=ey;
+			expa=ex;
+			ezpa=ez;
 			ros::spin();
 			
 		  }
