@@ -8,8 +8,6 @@
 #include <std_msgs/Empty.h>
 #include <std_msgs/String.h>
 #include <sstream>
-
-#include <ros/ros.h>
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <stdio.h>
@@ -20,6 +18,7 @@
 #include "opencv2/nonfree/nonfree.hpp"
 #include <ros/package.h>
 #include "opencv2/calib3d/calib3d.hpp"
+#include <geometry_msgs/Point.h>
 using namespace cv;
 using namespace std;
 //Values for Trackbar, Hue, Saturation Value
@@ -32,25 +31,19 @@ int iHighV=95;
 float ey,ez,ex;
 
 geometry_msgs::Twist twist_msg;
+geometry_msgs::Point point_msg;
 std_msgs::Empty emp_msg;
 
 	void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 	{
 		ros::Rate loop_rate(50);
 		int count=0;
-		double dM01;
-		double dM10;
-		double dArea;
-		int big;
 		Point pt;
 		ros::NodeHandle nh;
 		ros::NodeHandle neu;
-		ros::Publisher pub;
 		ros::Publisher pub_empty_land;
-		ros::Publisher pub_twist;
-		ros::Publisher chatter_pub=neu.advertise<std_msgs::String>("chatter", 1000);
+		ros::Publisher pub_point=neu.advertise<geometry_msgs::Point>("color_position",100);
 		pub_empty_land = neu.advertise<std_msgs::Empty>("/ardrone/land", 1); /* Message queue length is just 1 */
-		pub = neu.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
 	
 		//Communicating between ROS an OpenCV
 		cv_bridge::CvImagePtr cv_ptr;
@@ -144,8 +137,11 @@ std_msgs::Empty emp_msg;
 			
 					center.x=posY;
 					center.y=posZ;
+					geometry_msgs::Point pospt;
+					pospt.x=center.x;
+					pospt.y=center.y;
 					Mat img_matches;
-
+					pub_point.publish(pospt);
 		    			circle( img2, center, 32.0, Scalar( 0, 0, 255 ), 1, 8 );
 					cv::Mat img_keypoints_2;
 					 //show the frame in "MyVideo" window
@@ -170,12 +166,11 @@ std_msgs::Empty emp_msg;
 
 				ey=(319-posY)/319.0;
 				ez=(179-posZ)/179.0;
-				//ROS_INFO("Ball Position:[%f,%f]",ey,ez);
 				printf("Pos:[%f,%f], Error:[%f,%f] \n",posY,posZ,ey,ez);
 
-				twist_msg.angular.z=ey;
+				
 						
-				pub.publish(twist_msg);
+				
 				ros::spinOnce();
 				posY=0.0;
 				posZ=0.0;
@@ -186,7 +181,6 @@ std_msgs::Empty emp_msg;
 		
 			//cv::imshow("view",img_keypoints_2);
 			cv::waitKey(30);
-			ros::spin();
 			
 		  }
 		  catch (cv_bridge::Exception& e)
@@ -215,7 +209,7 @@ int main(int argc, char **argv)
 
 	//Subscribing to ardrone camera node
 	image_transport::ImageTransport it(nh);
-	image_transport::Subscriber sub = it.subscribe("/ardrone/front/image_raw", 1, imageCallback);
+	image_transport::Subscriber sub = it.subscribe("/ardrone/image_raw", 1, imageCallback);
 	ros::spin();
 	cv::destroyWindow("view");
 }
