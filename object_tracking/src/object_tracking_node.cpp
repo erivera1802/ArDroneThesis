@@ -21,13 +21,6 @@
 #include <geometry_msgs/Point.h>
 using namespace cv;
 using namespace std;
-//Values for Trackbar, Hue, Saturation Value
-int iLowH=174;
-int iHighH=179;
-int iLowS=136;
-int iHighS=202;
-int iLowV=40;
-int iHighV=95;
 float ey,ez,ex;
 
 geometry_msgs::Twist twist_msg;
@@ -62,13 +55,13 @@ std_msgs::Empty emp_msg;
 				//Thresholding
 				cv::cvtColor(cv_ptr->image,img2,CV_BGR2GRAY);
 				Mat img1 = imread(image, CV_LOAD_IMAGE_GRAYSCALE );
-				//imshow("control",img1);
-				if( img1.empty() ) {
-		 		printf("Error occured, image not read correctly \n");
 
+				if( img1.empty() ) 
+				{
+			 		printf("Error occured, image not read correctly \n");
 				}
-				//cv::imshow("view",img_thr); 
-				//Voilá
+
+				//Detector, and extractor initializing
 				OrbFeatureDetector detector;
 			    	vector<KeyPoint> keypoints1, keypoints2;
 				detector.detect(img1, keypoints1);
@@ -76,14 +69,13 @@ std_msgs::Empty emp_msg;
 				OrbDescriptorExtractor extractor;
 				Mat descriptors1, descriptors2;
 				extractor.compute(img1, keypoints1, descriptors1);
-
+				//Matching
 				BFMatcher matcher(NORM_HAMMING,false);
-		    		//vector<DMatch> matches12,matches21;
 				vector< vector< DMatch > > matches;
 				vector<DMatch> good_matches;
 		
 
-		
+				//Vector Initializing		
 				Point center;
 				DMatch Forward,Backward;
 				std::vector<Point2f> obj;
@@ -95,10 +87,10 @@ std_msgs::Empty emp_msg;
 				detector.detect(img2, keypoints2);
 			    	// computing descriptors
 			    	extractor.compute(img2, keypoints2, descriptors2);
-		
-		  		//std::vector< DMatch > matches;
 
-				matcher.knnMatch(descriptors1, descriptors2, matches, 2);
+
+				matcher.knnMatch(descriptors2, descriptors1, matches, 2);
+				//Good Matches Selection
 				for (int i = 0; i < matches.size(); ++i)
 				{
 				    const float ratio = 0.8; // As in Lowe's paper; can be tuned
@@ -115,9 +107,9 @@ std_msgs::Empty emp_msg;
 				posY=posY+scene[i].x;
 				posZ=posZ+scene[i].y;
 				}
-				//if(good_matches.size()>3)
-				//{
-				/*Mat H = findHomography( obj, scene, CV_RANSAC );
+				if(good_matches.size()>3)
+				{
+				Mat H = findHomography( obj, scene, CV_RANSAC );
 
 				//-- Get the corners from the image_1 ( the object to be "detected" )
 				std::vector<Point2f> obj_corners(4);
@@ -127,7 +119,7 @@ std_msgs::Empty emp_msg;
 				obj_corners[3] = cvPoint( 0, img1.rows );
 				std::vector<Point2f> scene_corners(4);
 				
-				perspectiveTransform( obj_corners, scene_corners, H);*/
+				perspectiveTransform( obj_corners, scene_corners, H);
 
   //-- Draw lines between the corners (the mapped object in the scene - image_2 )
 				  
@@ -145,24 +137,27 @@ std_msgs::Empty emp_msg;
 		    			circle( img2, center, 32.0, Scalar( 0, 0, 255 ), 1, 8 );
 					cv::Mat img_keypoints_2;
 					 //show the frame in "MyVideo" window
-		  		  drawMatches( img1, keypoints1, img2, keypoints2,
+			if(keypoints2.size()!=0 && keypoints1.size()!=0)
+				{
+		  		  drawMatches( img1, keypoints2, img2, keypoints1,
 			      good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),
 			       vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
+				}
 		
 		
 				good_matches.clear();
 				obj.clear();
 				scene.clear();
-				//line( img_matches, scene_corners[0] + Point2f( img1.cols, 0), scene_corners[1] + Point2f( img1.cols, 0), Scalar(0, 255, 0), 4 );
-				  //line( img_matches, scene_corners[1] + Point2f( img1.cols, 0), scene_corners[2] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4 );
-			//	  line( img_matches, scene_corners[2] + Point2f( img1.cols, 0), scene_corners[3] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4 );
-			//	  line( img_matches, scene_corners[3] + Point2f( img1.cols, 0), scene_corners[0] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4);
+				line( img_matches, scene_corners[0] + Point2f( img1.cols, 0), scene_corners[1] + Point2f( img1.cols, 0), Scalar(0, 255, 0), 4 );
+				  line( img_matches, scene_corners[1] + Point2f( img1.cols, 0), scene_corners[2] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4 );
+				  line( img_matches, scene_corners[2] + Point2f( img1.cols, 0), scene_corners[3] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4 );
+				  line( img_matches, scene_corners[3] + Point2f( img1.cols, 0), scene_corners[0] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4);
 				//cv::Mat img_keypoints_2;
 				//drawKeypoints( img2, keypoints2, img_keypoints_2, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
 				
 				
 				imshow("view", img_matches );
-				//}
+				}
 
 				ey=(319-posY)/319.0;
 				ez=(179-posZ)/179.0;
