@@ -49,9 +49,11 @@ std_msgs::Empty emp_msg;
 		  {
 
 
-				std::string image = ros::package::getPath("stream") + "/src/box.jpg";
+				std::string image = ros::package::getPath("stream") + "/src/box3.jpg";
 				cv_ptr=cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
 				cv::Mat img2;
+				cv::Mat color;
+				color=cv_ptr->image;
 				//Thresholding
 				cv::cvtColor(cv_ptr->image,img2,CV_BGR2GRAY);
 				Mat img1 = imread(image, CV_LOAD_IMAGE_GRAYSCALE );
@@ -63,7 +65,7 @@ std_msgs::Empty emp_msg;
 
 				//Detector, and extractor initializing
 				OrbFeatureDetector detector;
-			    	vector<KeyPoint> keypoints1, keypoints2;
+			    	vector<KeyPoint> keypoints1, keypoints2,objk,scenek;
 				detector.detect(img1, keypoints1);
 				    // computing descriptors
 				OrbDescriptorExtractor extractor;
@@ -73,7 +75,7 @@ std_msgs::Empty emp_msg;
 				BFMatcher matcher(NORM_HAMMING,false);
 				vector< vector< DMatch > > matches;
 				vector<DMatch> good_matches;
-		
+				
 
 				//Vector Initializing		
 				Point center;
@@ -87,13 +89,13 @@ std_msgs::Empty emp_msg;
 				detector.detect(img2, keypoints2);
 			    	// computing descriptors
 			    	extractor.compute(img2, keypoints2, descriptors2);
-
+				
 
 				matcher.knnMatch(descriptors2, descriptors1, matches, 2);
 				//Good Matches Selection
 				for (int i = 0; i < matches.size(); ++i)
 				{
-				    const float ratio = 0.8; // As in Lowe's paper; can be tuned
+				    const float ratio = 0.9; // As in Lowe's paper; can be tuned
 				    if (matches[i][0].distance < ratio * matches[i][1].distance)
 				    {
 					good_matches.push_back(matches[i][0]);
@@ -104,13 +106,16 @@ std_msgs::Empty emp_msg;
 				  //-- Get the keypoints from the good matches
 				scene.push_back( keypoints2[ good_matches[i].queryIdx ].pt );
 				obj.push_back( keypoints1[ good_matches[i].trainIdx ].pt );
+				
+				scenek.push_back( keypoints2[ good_matches[i].queryIdx ] );
+				objk.push_back( keypoints1[ good_matches[i].trainIdx ] );
 				posY=posY+scene[i].x;
 				posZ=posZ+scene[i].y;
 				}
 				if(good_matches.size()>3)
 				{
 				Mat H = findHomography( obj, scene, CV_RANSAC );
-
+				
 				//-- Get the corners from the image_1 ( the object to be "detected" )
 				std::vector<Point2f> obj_corners(4);
 				obj_corners[0] = cvPoint(0,0); 
@@ -136,13 +141,10 @@ std_msgs::Empty emp_msg;
 					pub_point.publish(pospt);
 		    			circle( img2, center, 32.0, Scalar( 0, 0, 255 ), 1, 8 );
 					cv::Mat img_keypoints_2;
-					 //show the frame in "MyVideo" window
-			if(keypoints2.size()!=0 && keypoints1.size()!=0)
-				{
-		  		  drawMatches( img1, keypoints1, img2, keypoints2,
+/*
+		  		  drawMatches( img1, scenek, img2, objk,
 			      good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),
 			       vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
-				}
 		
 		
 				good_matches.clear();
@@ -154,15 +156,21 @@ std_msgs::Empty emp_msg;
 				  line( img_matches, scene_corners[3] + Point2f( img1.cols, 0), scene_corners[0] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4);
 				//cv::Mat img_keypoints_2;
 				//drawKeypoints( img2, keypoints2, img_keypoints_2, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
-				
+				*/
+				img_matches=color;
+				line( img_matches, scene_corners[0], scene_corners[1] , Scalar(0, 255, 0), 4 );
+				  line( img_matches, scene_corners[1] , scene_corners[2] , Scalar( 0, 255, 0), 4 );
+				  line( img_matches, scene_corners[2] , scene_corners[3] , Scalar( 0, 255, 0), 4 );
+				  line( img_matches, scene_corners[3] , scene_corners[0] , Scalar( 0, 255, 0), 4);
 				
 				imshow("view", img_matches );
+				//imshow("control",img1);
 				}
 
 				ey=(319-posY)/319.0;
 				ez=(179-posZ)/179.0;
 				printf("Pos:[%f,%f], Error:[%f,%f] \n",posY,posZ,ey,ez);
-
+				
 				
 						
 				
@@ -176,7 +184,7 @@ std_msgs::Empty emp_msg;
 		
 			//cv::imshow("view",img_keypoints_2);
 			cv::waitKey(30);
-			ros::spin();
+			ros::spinOnce();
 			
 		  }
 		  catch (cv_bridge::Exception& e)
