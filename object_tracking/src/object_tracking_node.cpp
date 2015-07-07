@@ -117,12 +117,13 @@ std_msgs::Empty emp_msg;
 				Mat H = findHomography( obj, scene, CV_RANSAC );
 				
 				//-- Get the corners from the image_1 ( the object to be "detected" )
-				std::vector<Point2f> obj_corners(4);
+				std::vector<Point2f> obj_corners(5);
 				obj_corners[0] = cvPoint(0,0); 
 				obj_corners[1] = cvPoint( img1.cols, 0 );
 				obj_corners[2] = cvPoint( img1.cols, img1.rows ); 
 				obj_corners[3] = cvPoint( 0, img1.rows );
-				std::vector<Point2f> scene_corners(4);
+				obj_corners[4] = cvPoint( img1.cols/2, img1.rows/2 );
+				std::vector<Point2f> scene_corners(5);
 				
 				perspectiveTransform( obj_corners, scene_corners, H);
 
@@ -139,10 +140,10 @@ std_msgs::Empty emp_msg;
 					pospt.y=center.y;
 					Mat img_matches;
 					pub_point.publish(pospt);
-		    			circle( img2, center, 32.0, Scalar( 0, 0, 255 ), 1, 8 );
+		    			//circle( img2, center, 32.0, Scalar( 0, 0, 255 ), 1, 8 );
 					cv::Mat img_keypoints_2;
-/*
-		  		  drawMatches( img1, scenek, img2, objk,
+
+		  		  drawMatches(  img2, keypoints2,img1, keypoints1,
 			      good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),
 			       vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
 		
@@ -150,6 +151,9 @@ std_msgs::Empty emp_msg;
 				good_matches.clear();
 				obj.clear();
 				scene.clear();
+				objk.clear();
+				scenek.clear();
+				/*
 				line( img_matches, scene_corners[0] + Point2f( img1.cols, 0), scene_corners[1] + Point2f( img1.cols, 0), Scalar(0, 255, 0), 4 );
 				  line( img_matches, scene_corners[1] + Point2f( img1.cols, 0), scene_corners[2] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4 );
 				  line( img_matches, scene_corners[2] + Point2f( img1.cols, 0), scene_corners[3] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4 );
@@ -157,13 +161,13 @@ std_msgs::Empty emp_msg;
 				//cv::Mat img_keypoints_2;
 				//drawKeypoints( img2, keypoints2, img_keypoints_2, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
 				*/
-				img_matches=color;
+				//img_matches=color;
 				line( img_matches, scene_corners[0], scene_corners[1] , Scalar(0, 255, 0), 4 );
 				  line( img_matches, scene_corners[1] , scene_corners[2] , Scalar( 0, 255, 0), 4 );
 				  line( img_matches, scene_corners[2] , scene_corners[3] , Scalar( 0, 255, 0), 4 );
 				  line( img_matches, scene_corners[3] , scene_corners[0] , Scalar( 0, 255, 0), 4);
-				
-				imshow("view", color );
+				circle( img_matches, scene_corners[4], 32.0, Scalar( 0, 0, 255 ), 4, 8 );
+				imshow("view", img_matches );
 				//imshow("control",img1);
 				}
 
