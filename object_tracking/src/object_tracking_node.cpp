@@ -12,6 +12,9 @@
 #include <cv_bridge/cv_bridge.h>
 #include <stdio.h>
 #include <iostream>
+#include <vector>
+#include <sys/time.h>
+#include <cmath>
 #include "opencv2/core/core.hpp"
 #include "opencv2/features2d/features2d.hpp"
 #include "opencv2/nonfree/features2d.hpp"
@@ -19,37 +22,48 @@
 #include <ros/package.h>
 #include "opencv2/calib3d/calib3d.hpp"
 #include <geometry_msgs/Point.h>
+#include <fstream>
+#include <opencv2/video/tracking.hpp>
+#include <opencv2/video/video.hpp>
 using namespace cv;
 using namespace std;
 float ey,ez,ex;
-
-geometry_msgs::Twist twist_msg;
+float refz;
+float xpast=0,ypast=0,zpast=0;
+//float PosX,PosY,PosZ;
 geometry_msgs::Point point_msg;
 std_msgs::Empty emp_msg;
+
+//Camera Matrix:
+cv::Mat Matrix(3,3,CV_64F);
+//Translation and rotation matrices
+cv::Mat tvec;
+cv::Mat rvec;
+//Distortion Vector
+vector<double> distortion(5);
+
 
 	void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 	{
 		ros::Rate loop_rate(50);
+		ofstream myfile("/home/edrone/pos.txt",ios_base::app);
 		int count=0;
+		
 		Point pt;
-		ros::NodeHandle nh;
 		ros::NodeHandle neu;
 		ros::Publisher pub_empty_land;
-		ros::Publisher pub_point=neu.advertise<geometry_msgs::Point>("color_position",100);
+		ros::Publisher pub_point=neu.advertise<geometry_msgs::Point>("color_position",1000);
 		pub_empty_land = neu.advertise<std_msgs::Empty>("/ardrone/land", 1); /* Message queue length is just 1 */
 	
 		//Communicating between ROS an OpenCV
-		cv_bridge::CvImagePtr cv_ptr;
-
-		cv::namedWindow("Control", CV_WINDOW_AUTOSIZE); 
-	
+		cv_bridge::CvImagePtr cv_ptr; 
 		cv::Mat img_thr;
 
 		  try
 		  {
 
 
-				std::string image = ros::package::getPath("stream") + "/src/box3.jpg";
+				std::string image = ros::package::getPath("stream") + "/src/paint.jpg";
 				cv_ptr=cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
 				cv::Mat img2;
 				cv::Mat color;
@@ -95,7 +109,7 @@ std_msgs::Empty emp_msg;
 				//Good Matches Selection
 				for (int i = 0; i < matches.size(); ++i)
 				{
-				    const float ratio = 0.9; // As in Lowe's paper; can be tuned
+				    const float ratio = 0.7; // As in Lowe's paper; can be tuned
 				    if (matches[i][0].distance < ratio * matches[i][1].distance)
 				    {
 					good_matches.push_back(matches[i][0]);
@@ -103,94 +117,121 @@ std_msgs::Empty emp_msg;
 				}
 				for( int i = 0; i < good_matches.size(); i++ )
 				{
-				  //-- Get the keypoints from the good matches
-				scene.push_back( keypoints2[ good_matches[i].queryIdx ].pt );
-				obj.push_back( keypoints1[ good_matches[i].trainIdx ].pt );
+					  //-- Get the keypoints from the good matches
+					scene.push_back( keypoints2[ good_matches[i].queryIdx ].pt );
+					obj.push_back( keypoints1[ good_matches[i].trainIdx ].pt );
 				
-				scenek.push_back( keypoints2[ good_matches[i].queryIdx ] );
-				objk.push_back( keypoints1[ good_matches[i].trainIdx ] );
-				posY=posY+scene[i].x;
-				posZ=posZ+scene[i].y;
+					scenek.push_back( keypoints2[ good_matches[i].queryIdx ] );
+					objk.push_back( keypoints1[ good_matches[i].trainIdx ] );
+
 				}
+				geometry_msgs::Point pospt;
 				if(good_matches.size()>3)
 				{
-				Mat H = findHomography( obj, scene, CV_RANSAC );
+					Mat H = findHomography( obj, scene, CV_RANSAC );
 				
-				//-- Get the corners from the image_1 ( the object to be "detected" )
-				std::vector<Point2f> obj_corners(5);
-				obj_corners[0] = cvPoint(0,0); 
-				obj_corners[1] = cvPoint( img1.cols, 0 );
-				obj_corners[2] = cvPoint( img1.cols, img1.rows ); 
-				obj_corners[3] = cvPoint( 0, img1.rows );
-				obj_corners[4] = cvPoint( img1.cols/2, img1.rows/2 );
-				std::vector<Point2f> scene_corners(5);
+					//-- Get the corners from the image_1 ( the object to be "detected" )
+					std::vector<Point2f> obj_corners(5);
+					std::vector<Point3f> obj_3D(5);
+					obj_corners[0] = cvPoint(0,0); 
+					obj_corners[1] = cvPoint( img1.cols, 0 );
+					obj_corners[2] = cvPoint( img1.cols, img1.rows ); 
+					obj_corners[3] = cvPoint( 0, img1.rows );
+					obj_corners[4] = cvPoint( img1.cols/2, img1.rows/2 );
+					obj_3D[0] = Point3f(0,0,0); 
+					obj_3D[1] = Point3f( img1.cols, 0,0 );
+					obj_3D[2] = Point3f( img1.cols, img1.rows,0 ); 
+					obj_3D[3] = Point3f( 0, img1.rows ,0);
+					obj_3D[4] = Point3f( img1.cols/2, img1.rows/2 ,0);
+					std::vector<Point2f> scene_corners(5);
 				
-				perspectiveTransform( obj_corners, scene_corners, H);
+					perspectiveTransform( obj_corners, scene_corners, H);
 
-  //-- Draw lines between the corners (the mapped object in the scene - image_2 )
-				  
-					posY=posY/(good_matches.size());
-					posZ=posZ/(good_matches.size());
-					//printf("%f,%f \n",posY,posZ);
+	  //-- Draw lines between the corners (the mapped object in the scene - image_2 )
+					  
+
 			
-					center.x=posY;
-					center.y=posZ;
-					geometry_msgs::Point pospt;
-					pospt.x=center.x;
-					pospt.y=center.y;
-					Mat img_matches;
-					pub_point.publish(pospt);
-		    			//circle( img2, center, 32.0, Scalar( 0, 0, 255 ), 1, 8 );
-					cv::Mat img_keypoints_2;
+						
+						//Posx, Posy
+						/*pospt.x=scene_corners[4].x;
+						pospt.y=scene_corners[4].y;
+						
+						//PosZ
+						refz=abs(obj_corners[1].x-obj_corners[0].x)*abs(obj_corners[3].y-obj_corners[0].y)*0.5;
+						pospt.z=(abs(scene_corners[1].x-scene_corners[0].x)*abs(scene_corners[3].y-scene_corners[0].y)/refz)-1;
+						if(abs(pospt.z)>1)
+							{pospt.z=pospt.z/abs(pospt.z);}					
+						printf("[%f,%f,%f] \n",pospt.x,pospt.y,pospt.z);*/
+						Mat img_matches;
+						
+						cv::Mat img_keypoints_2;
 
-		  		  drawMatches(  img2, keypoints2,img1, keypoints1,
-			      good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),
-			       vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
+			  		  drawMatches(  img2, keypoints2,img1, keypoints1,good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
 		
 		
-				good_matches.clear();
-				obj.clear();
-				scene.clear();
-				objk.clear();
-				scenek.clear();
-				/*
-				line( img_matches, scene_corners[0] + Point2f( img1.cols, 0), scene_corners[1] + Point2f( img1.cols, 0), Scalar(0, 255, 0), 4 );
-				  line( img_matches, scene_corners[1] + Point2f( img1.cols, 0), scene_corners[2] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4 );
-				  line( img_matches, scene_corners[2] + Point2f( img1.cols, 0), scene_corners[3] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4 );
-				  line( img_matches, scene_corners[3] + Point2f( img1.cols, 0), scene_corners[0] + Point2f( img1.cols, 0), Scalar( 0, 255, 0), 4);
-				//cv::Mat img_keypoints_2;
-				//drawKeypoints( img2, keypoints2, img_keypoints_2, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
-				*/
-				//img_matches=color;
-				line( img_matches, scene_corners[0], scene_corners[1] , Scalar(0, 255, 0), 4 );
-				  line( img_matches, scene_corners[1] , scene_corners[2] , Scalar( 0, 255, 0), 4 );
-				  line( img_matches, scene_corners[2] , scene_corners[3] , Scalar( 0, 255, 0), 4 );
-				  line( img_matches, scene_corners[3] , scene_corners[0] , Scalar( 0, 255, 0), 4);
-				circle( img_matches, scene_corners[4], 32.0, Scalar( 0, 0, 255 ), 4, 8 );
-				imshow("view", img_matches );
-				//imshow("control",img1);
+					good_matches.clear();
+					obj.clear();
+					scene.clear();
+					objk.clear();
+					scenek.clear();
+
+					line( img_matches, scene_corners[0], scene_corners[1] , Scalar(0, 255, 0), 4 );
+					  line( img_matches, scene_corners[1] , scene_corners[2] , Scalar( 0, 255, 0), 4 );
+					  line( img_matches, scene_corners[2] , scene_corners[3] , Scalar( 0, 255, 0), 4 );
+					  line( img_matches, scene_corners[3] , scene_corners[0] , Scalar( 0, 255, 0), 4);
+					circle( img_matches, scene_corners[4], 32.0, Scalar( 0, 0, 255 ), 4, 8 );
+					
+					//PNP stuff
+					solvePnP(Mat(obj_3D),Mat(scene_corners),Matrix,distortion,rvec,tvec,false,CV_ITERATIVE);
+					
+					
+					//cv::Mat R;
+					//cv::Rodrigues(rvec, R); // R is 3x3
+
+					//R = R.t();  // rotation of inverse
+					//tvec = -R * tvec; // translation of inverse
+					printf("[%f,%f,%f] \n",tvec.at<double>(0,0),tvec.at<double>(1,0),tvec.at<double>(2,0));
+					//Watch out big values
+					if(abs(tvec.at<double>(0,0))>1500)
+					{tvec.at<double>(0,0)=tvec.at<double>(0,0)/abs(tvec.at<double>(0,0));}
+					if(abs(tvec.at<double>(1,0))>1500)
+					{tvec.at<double>(1,0)=tvec.at<double>(1,0)/abs(tvec.at<double>(1,0));}
+					if(abs(tvec.at<double>(2,0))>1500)
+					{tvec.at<double>(2,0)=tvec.at<double>(2,0)/abs(tvec.at<double>(2,0));}
+					//Watch out big changes
+					if(abs(tvec.at<double>(0,0)-xpast)>500)
+					{tvec.at<double>(0,0)=xpast;}
+					if(abs(tvec.at<double>(1,0)-ypast)>500)
+					{tvec.at<double>(1,0)=ypast;}
+					if(abs(tvec.at<double>(2,0)-zpast)>500)
+					{tvec.at<double>(2,0)=zpast;}
+					
+					
+
+
+
+					pospt.x=tvec.at<double>(0,0);
+					pospt.y=tvec.at<double>(1,0);
+					pospt.z=tvec.at<double>(2,0);
+					myfile << pospt.x<<"   "<< pospt.y<<"   "<< pospt.z<<"\n";
+						pub_point.publish(pospt);
+					imshow("view", img_matches );
+					xpast=tvec.at<double>(0,0);
+					ypast=tvec.at<double>(1,0);
+					zpast=tvec.at<double>(2,0);
+				}
+				else
+				{
+					pospt.x=0.0;
+					pospt.y=0.0;
+					pospt.z=0.0;
 				}
 
-				ey=(319-posY)/319.0;
-				ez=(179-posZ)/179.0;
-				printf("Pos:[%f,%f], Error:[%f,%f] \n",posY,posZ,ey,ez);
-				
-				
-						
-				
-				
-				posY=0.0;
-				posZ=0.0;
-		
-				  
-
-		
-		
-			//cv::imshow("view",img_keypoints_2);
-			cv::waitKey(30);
+			cv::waitKey(15);
 			ros::spinOnce();
 			
 		  }
+
 		  catch (cv_bridge::Exception& e)
 		  {
 		    ROS_ERROR("Could not convert from '%s' to 'bgr8'.", msg->encoding.c_str());
@@ -207,13 +248,23 @@ int main(int argc, char **argv)
 	ros::Rate loop_rate(50);	
 	cv::namedWindow("view");
 	cv::startWindowThread();
-	twist_msg.linear.x=0.0;
-	twist_msg.linear.y=0.0;	
-	twist_msg.angular.z=0.0;
-	twist_msg.angular.y=0.0;
 		
-
-
+	//Initializing camera matrix
+	Matrix.at<double>(0,0)=560.21;
+	Matrix.at<double>(0,1)=0.0;
+	Matrix.at<double>(0,2)=336.8;
+	Matrix.at<double>(1,0)=0.0;
+	Matrix.at<double>(1,1)=558.91;
+	Matrix.at<double>(1,2)=172.37;
+	Matrix.at<double>(2,0)=0.0;
+	Matrix.at<double>(2,1)=0.0;
+	Matrix.at<double>(2,2)=1.0;
+	//Initializing distortion vector
+	distortion[0]=-0.521;
+	distortion[1]=0.278;
+	distortion[2]=0.0009;
+	distortion[3]=0.0008;
+	distortion[4]=0;
 
 	//Subscribing to ardrone camera node
 	image_transport::ImageTransport it(nh);
