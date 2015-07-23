@@ -30,17 +30,42 @@ using namespace std;
 float ey,ez,ex;
 float refz;
 float xpast=0,ypast=0,zpast=0;
+//Values for Trackbar, Hue, Saturation Value
+int iLowH=160;
+int iHighH=179;
+int iLowS=161;
+int iHighS=211;
+int iLowV=146;
+int iHighV=248;
 //float PosX,PosY,PosZ;
 geometry_msgs::Point point_msg;
 std_msgs::Empty emp_msg;
+geometry_msgs::Point punto;
+
+//blob detection
+
+ SimpleBlobDetector::Params params;
+        
+//Color Trackbar
 
 //Camera Matrix:
 cv::Mat Matrix(3,3,CV_64F);
 //Translation and rotation matrices
 cv::Mat tvec;
 cv::Mat rvec;
+cv::Mat estimated;
 //Distortion Vector
 vector<double> distortion(5);
+	//Kalman Filter Initialization
+   int stateSize = 6;
+   int measSize = 3;
+   int contrSize = 0;
+   unsigned int type = CV_32F;
+	cv::KalmanFilter kf(stateSize, measSize, contrSize, type);
+	cv::Mat state(stateSize, 1, type);  // [x,y,z,v_x,v_y,v_z]
+  	cv::Mat meas(measSize, 1, type);    // [z_x,z_y,z_z]
+
+	int found=0;
 
 
 	void imageCallback(const sensor_msgs::ImageConstPtr& msg)
@@ -52,7 +77,7 @@ vector<double> distortion(5);
 		Point pt;
 		ros::NodeHandle neu;
 		ros::Publisher pub_empty_land;
-		ros::Publisher pub_point=neu.advertise<geometry_msgs::Point>("color_position",1000);
+		ros::Publisher pub_point=neu.advertise<geometry_msgs::Point>("color_position",1);
 		pub_empty_land = neu.advertise<std_msgs::Empty>("/ardrone/land", 1); /* Message queue length is just 1 */
 	
 		//Communicating between ROS an OpenCV
@@ -63,11 +88,22 @@ vector<double> distortion(5);
 		  {
 
 
-				std::string image = ros::package::getPath("stream") + "/src/paint.jpg";
+				std::string image = ros::package::getPath("stream") + "/src/box3.jpg";
 				cv_ptr=cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
 				cv::Mat img2;
 				cv::Mat color;
+				cv::Mat gauss;
+				cv::Mat blobs;
 				color=cv_ptr->image;
+				cv::GaussianBlur( cv_ptr->image, gauss, Size( 3, 3 ), 0, 0 );
+				cv::cvtColor(gauss,gauss,CV_BGR2HSV); 
+				cvCreateTrackbar("LowH", "blob", &iLowH, 179); 
+				cvCreateTrackbar("HighH", "blob", &iHighH, 179); 
+				cvCreateTrackbar("LowS", "blob", &iLowS, 255); 
+				cvCreateTrackbar("HighS", "blob", &iHighS, 255); 
+				cvCreateTrackbar("LowV", "blob", &iLowV, 255); 
+				cvCreateTrackbar("HighV", "blob", &iHighV, 255);
+				cv::inRange(gauss, cv::Scalar(iLowH,iLowS,iLowV), cv::Scalar(iHighH,iHighS,iHighV), gauss); 
 				//Thresholding
 				cv::cvtColor(cv_ptr->image,img2,CV_BGR2GRAY);
 				Mat img1 = imread(image, CV_LOAD_IMAGE_GRAYSCALE );
@@ -76,7 +112,21 @@ vector<double> distortion(5);
 				{
 			 		printf("Error occured, image not read correctly \n");
 				}
-
+				//Blob detection
+				vector<KeyPoint> keyPointsBlob;
+				SimpleBlobDetector blobDetector( params );
+				
+				/*blobDetector.detect( gauss, keyPointsBlob );
+				if(keyPointsBlob.size()>0)
+				{
+				//printf("%f,hola",keyPointsBlob[0].pt.x);
+				drawKeypoints(gauss,keyPointsBlob,blobs,Scalar::all(-1),DrawMatchesFlags::DEFAULT);
+				//imshow("blob", blobs );
+				}
+				else
+				{printf("kein keypoints");}*/
+				imshow("blob",gauss);
+				
 				//Detector, and extractor initializing
 				OrbFeatureDetector detector;
 			    	vector<KeyPoint> keypoints1, keypoints2,objk,scenek;
@@ -126,6 +176,7 @@ vector<double> distortion(5);
 
 				}
 				geometry_msgs::Point pospt;
+				
 				if(good_matches.size()>3)
 				{
 					Mat H = findHomography( obj, scene, CV_RANSAC );
@@ -138,11 +189,11 @@ vector<double> distortion(5);
 					obj_corners[2] = cvPoint( img1.cols, img1.rows ); 
 					obj_corners[3] = cvPoint( 0, img1.rows );
 					obj_corners[4] = cvPoint( img1.cols/2, img1.rows/2 );
-					obj_3D[0] = Point3f(0,0,0); 
-					obj_3D[1] = Point3f( img1.cols, 0,0 );
-					obj_3D[2] = Point3f( img1.cols, img1.rows,0 ); 
-					obj_3D[3] = Point3f( 0, img1.rows ,0);
-					obj_3D[4] = Point3f( img1.cols/2, img1.rows/2 ,0);
+					obj_3D[0] = Point3f(-0.26,0.26,0); 
+					obj_3D[1] = Point3f( 0.26, 0.26,0 );
+					obj_3D[2] = Point3f( 0.26, -0.26,0 ); 
+					obj_3D[3] = Point3f( 0, 0.26 ,0);
+					obj_3D[4] = Point3f( 0.0, 0.0 ,0);
 					std::vector<Point2f> scene_corners(5);
 				
 					perspectiveTransform( obj_corners, scene_corners, H);
@@ -190,7 +241,7 @@ vector<double> distortion(5);
 
 					//R = R.t();  // rotation of inverse
 					//tvec = -R * tvec; // translation of inverse
-					printf("[%f,%f,%f] \n",tvec.at<double>(0,0),tvec.at<double>(1,0),tvec.at<double>(2,0));
+					//printf("[%f,%f,%f] \n",tvec.at<double>(0,0),tvec.at<double>(1,0),tvec.at<double>(2,0));
 					//Watch out big values
 					if(abs(tvec.at<double>(0,0))>1500)
 					{tvec.at<double>(0,0)=tvec.at<double>(0,0)/abs(tvec.at<double>(0,0));}
@@ -210,11 +261,10 @@ vector<double> distortion(5);
 
 
 
-					pospt.x=tvec.at<double>(0,0);
-					pospt.y=tvec.at<double>(1,0);
-					pospt.z=tvec.at<double>(2,0);
-					myfile << pospt.x<<"   "<< pospt.y<<"   "<< pospt.z<<"\n";
-						pub_point.publish(pospt);
+					punto.x=tvec.at<double>(0,0);
+					punto.y=tvec.at<double>(1,0);
+					punto.z=tvec.at<double>(2,0);
+					
 					imshow("view", img_matches );
 					xpast=tvec.at<double>(0,0);
 					ypast=tvec.at<double>(1,0);
@@ -222,11 +272,59 @@ vector<double> distortion(5);
 				}
 				else
 				{
-					pospt.x=0.0;
-					pospt.y=0.0;
-					pospt.z=0.0;
+					punto.x=0;
+					punto.y=0;
+					punto.z=0.7;
+					found=0;
+					printf("holi");
 				}
 
+				meas.at<float>(0) = punto.x;
+				meas.at<float>(1) = punto.y;
+				meas.at<float>(2) = punto.z;
+
+				
+				if(found==0)
+				{
+				 	kf.errorCovPre.at<float>(0,0) = 1; // px
+					kf.errorCovPre.at<float>(1,1) = 1; // px
+					kf.errorCovPre.at<float>(2,2) = 1;
+					kf.errorCovPre.at<float>(3,3) = 1;
+					kf.errorCovPre.at<float>(4,4) = 1; // px
+					kf.errorCovPre.at<float>(5,5) = 1; // px
+		
+					state.at<float>(0) = meas.at<float>(0);
+					state.at<float>(1) = meas.at<float>(1);
+					state.at<float>(2) = meas.at<float>(2);
+					state.at<float>(3) = 0.0;
+					state.at<float>(4) = 0.0;
+					state.at<float>(5) = 0.0;
+		
+					// <<<< Initialization
+					found = 1;
+				}
+	
+				state=kf.predict();
+	
+	
+				 estimated=kf.correct(meas);
+				if(estimated.at<float>(0)!=estimated.at<float>(0))
+				{
+					found=0;
+					estimated.at<float>(0)=-200;
+					estimated.at<float>(1)=-170;
+					estimated.at<float>(2)=500;
+					estimated.at<float>(3)=0;
+					estimated.at<float>(4)=0;
+					estimated.at<float>(5)=0;
+					printf("hola");
+				}
+				printf("[%f,%f,%f] \n",estimated.at<float>(0),estimated.at<float>(1),estimated.at<float>(2));
+				pospt.x=estimated.at<float>(0);
+				pospt.y=estimated.at<float>(1);
+				pospt.z=estimated.at<float>(2);
+				myfile << pospt.x<<"   "<< punto.x<<"   "<< pospt.y<<"   "<< punto.y<<"   "<< pospt.z<<"   "<< punto.z<<"\n";
+				pub_point.publish(pospt);
 			cv::waitKey(15);
 			ros::spinOnce();
 			
@@ -247,12 +345,25 @@ int main(int argc, char **argv)
 	ros::NodeHandle nh;
 	ros::Rate loop_rate(50);	
 	cv::namedWindow("view");
+	cv::namedWindow("blob");
 	cv::startWindowThread();
-	twist_msg.linear.x=0.0;
-	twist_msg.linear.y=0.0;	
-	twist_msg.angular.z=0.0;
-	twist_msg.angular.y=0.0;
-		
+	//Blob detection initialization
+	params.minThreshold = 40;
+        params.maxThreshold = 60;
+        params.thresholdStep = 5;
+	params.minCircularity=0.5;
+        params.minArea = 100;
+        params.minConvexity = 0.3;
+        params.minInertiaRatio = 0.01;
+	
+        params.maxArea = 8000;
+        params.maxConvexity = 10;
+	  params.filterByInertia = false;
+  params.filterByConvexity = false;
+  params.filterByArea = true;
+        params.filterByColor = false;
+        params.filterByCircularity = false;
+	params.blobColor = 220;	
 	//Initializing camera matrix
 	Matrix.at<double>(0,0)=560.21;
 	Matrix.at<double>(0,1)=0.0;
@@ -270,11 +381,34 @@ int main(int argc, char **argv)
 	distortion[3]=0.0008;
 	distortion[4]=0;
 
+
+	float dt=0.0647;//Dont know it yet
+	//Transition Matrix A
+	cv::setIdentity(kf.transitionMatrix);
+	kf.transitionMatrix.at<float>(0,3)=dt;
+	kf.transitionMatrix.at<float>(1,4)=dt;
+	kf.transitionMatrix.at<float>(2,5)=dt;
+	//Measurement Matrix H
+	kf.measurementMatrix = cv::Mat::zeros(measSize, stateSize, type);
+	kf.measurementMatrix.at<float>(0,0) = 1.0f;
+	kf.measurementMatrix.at<float>(1,1) = 1.0f;
+	kf.measurementMatrix.at<float>(2,2) = 1.0f;
+	//Noise Covariance Matrix Q
+	kf.processNoiseCov.at<float>(0,0) = 1e-1;
+	kf.processNoiseCov.at<float>(1,1) = 1e-1;
+	kf.processNoiseCov.at<float>(2,2) = 1e-1;
+	kf.processNoiseCov.at<float>(3,3) = 2.0f;
+	kf.processNoiseCov.at<float>(4,4) = 2.0f;
+	kf.processNoiseCov.at<float>(5,5) = 2.0f;
+	
+	cv::setIdentity(kf.measurementNoiseCov, cv::Scalar(1e-1));
+
 	//Subscribing to ardrone camera node
 	image_transport::ImageTransport it(nh);
 	image_transport::Subscriber sub = it.subscribe("/ardrone/image_raw", 1, imageCallback);
 	ros::spin();
 	cv::destroyWindow("view");
+	cv::destroyWindow("blob");
 }
 
 
