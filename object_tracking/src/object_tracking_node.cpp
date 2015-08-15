@@ -33,7 +33,7 @@ float xpast=0,ypast=0,zpast=0;
 //Values for Trackbar, Hue, Saturation Value
 int iLowH=160;
 int iHighH=179;
-int iLowS=161;
+int iLowS=131;
 int iHighS=211;
 int iLowV=146;
 int iHighV=248;
@@ -43,9 +43,9 @@ std_msgs::Empty emp_msg;
 geometry_msgs::Point punto;
 
 //blob detection
-
  SimpleBlobDetector::Params params;
-        
+    std::vector<Point3f> col_3D(4);   
+std::vector<Point2f> color_keypoints(4);         
 //Color Trackbar
 
 //Camera Matrix:
@@ -79,13 +79,14 @@ vector<double> distortion(5);
 		Point pt;
 		ros::NodeHandle neu;
 		ros::Publisher pub_empty_land;
-		ros::Publisher pub_point=neu.advertise<geometry_msgs::Point>("color_position",100);
+		ros::Publisher pub_point=neu.advertise<geometry_msgs::Point>("color_position",1);
 		pub_empty_land = neu.advertise<std_msgs::Empty>("/ardrone/land", 1); /* Message queue length is just 1 */
 	
 		//Communicating between ROS an OpenCV
 		cv_bridge::CvImagePtr cv_ptr; 
 		cv::Mat img_thr;
-
+		    std::vector<Point3f> col_3D(4);   
+std::vector<Point2f> color_keypoints(4);  
 		  try
 		  {
 
@@ -98,9 +99,7 @@ vector<double> distortion(5);
 				cv::Mat blobs;
 				color=cv_ptr->image;
 				cv::GaussianBlur( cv_ptr->image, gauss, Size( 3, 3 ), 0, 0 );
-				Mat img1 = imread(image, CV_LOAD_IMAGE_GRAYSCALE );
 				cv::cvtColor(gauss,gauss,CV_BGR2HSV); 
-				cv::cvtColor(cv_ptr->image,img2,CV_BGR2GRAY);
 				cvCreateTrackbar("LowH", "blob", &iLowH, 179); 
 				cvCreateTrackbar("HighH", "blob", &iHighH, 179); 
 				cvCreateTrackbar("LowS", "blob", &iLowS, 255); 
@@ -108,10 +107,16 @@ vector<double> distortion(5);
 				cvCreateTrackbar("LowV", "blob", &iLowV, 255); 
 				cvCreateTrackbar("HighV", "blob", &iHighV, 255);
 				cv::inRange(gauss, cv::Scalar(iLowH,iLowS,iLowV), cv::Scalar(iHighH,iHighS,iHighV), gauss); 
-				//Thresholding
-				
-				
 
+				//Color reference
+				col_3D[0] = Point3f(-0.23,-0.245,0); 
+				col_3D[1] = Point3f(0.23,-0.245,0);
+				col_3D[2] = Point3f(-0.23,0.245,0); 
+				col_3D[3] = Point3f(0.23,0.245,0);
+				//Thresholding
+				cv::cvtColor(cv_ptr->image,img2,CV_BGR2GRAY);
+				Mat img1 = imread(image, CV_LOAD_IMAGE_GRAYSCALE );
+				
 				if( img1.empty() ) 
 				{
 			 		printf("Error occured, image not read correctly \n");
@@ -121,16 +126,24 @@ vector<double> distortion(5);
 				SimpleBlobDetector blobDetector( params );
 				
 				blobDetector.detect( gauss, keyPointsBlob );
-				if(keyPointsBlob.size()>0)
+				if(keyPointsBlob.size()==4)
 				{
-				printf("%lu \n",keyPointsBlob.size());
-				drawKeypoints(gauss,keyPointsBlob,blobs,Scalar::all(-1),DrawMatchesFlags::DEFAULT);
-				imshow("blob", blobs );
+					drawKeypoints(gauss,keyPointsBlob,blobs,Scalar::all(-1),DrawMatchesFlags::DEFAULT);
+					imshow("blob", blobs );
+					for(int a=0;a<keyPointsBlob.size();a=a+1)
+					{
+						color_keypoints[a]=keyPointsBlob[a].pt;
+					}
+					solvePnP(Mat(col_3D),Mat(color_keypoints),Matrix,distortion,rvec_col,tvec_col,false,CV_ITERATIVE);
+					//printf("%f,%f,%f, COLOR \n",tvec_col.at<double>(0,0),tvec_col.at<double>(1,0),tvec_col.at<double>(2,0));
+					//printf("%f,%f \n",color_keypoints[2].x,color_keypoints[2].y);
+
 				}
 				else
 				{printf("kein keypoints \n");}
 				//imshow("blob",gauss);
 				
+				//Detector, and extractor initializing
 				//Detector, and extractor initializing
 				//IMPORTAAAAAAAAAANT, REMEMBER TO CHECK SURF AND SIFT, 'CAUSE SCALE INVARIANCE PROBLEM :-(
 				//UUUUSMJSJIASLJADSJLDAJILDAJILDAJILDALJ?????¡!!!!!!!!!!!!!!!!!
@@ -191,40 +204,26 @@ vector<double> distortion(5);
 					//-- Get the corners from the image_1 ( the object to be "detected" )
 					std::vector<Point2f> obj_corners(5);
 					std::vector<Point3f> obj_3D(5);
-					std::vector<Point3f> col_3D(3);
 					obj_corners[0] = cvPoint(0,0); 
 					obj_corners[1] = cvPoint( img1.cols, 0 );
 					obj_corners[2] = cvPoint( img1.cols, img1.rows ); 
 					obj_corners[3] = cvPoint( 0, img1.rows );
 					obj_corners[4] = cvPoint( img1.cols/2, img1.rows/2 );
-					obj_3D[0] = Point3f(-0.28,0.28,0); 
-					obj_3D[1] = Point3f( 0.28, 0.28,0 );
-					obj_3D[2] = Point3f( 0.28, -0.28,0 ); 
-					obj_3D[3] = Point3f( 0, 0.28 ,0);
+					obj_3D[0] = Point3f(-0.26,0.26,0); 
+					obj_3D[1] = Point3f( 0.26, 0.26,0 );
+					obj_3D[2] = Point3f( 0.26, -0.26,0 ); 
+					obj_3D[3] = Point3f( 0, 0.26 ,0);
 					obj_3D[4] = Point3f( 0.0, 0.0 ,0);
-					col_3D[0] = Point3f(-0.22,-0.06,0); 
-					col_3D[1] = Point3f( -0.22, 0.0,0 );
-					col_3D[2] = Point3f( 0.22, -0.06,0 ); 
-					
 					std::vector<Point2f> scene_corners(5);
-					std::vector<Point2f> scenecol_corners(5);
 				
 					perspectiveTransform( obj_corners, scene_corners, H);
+
 	  //-- Draw lines between the corners (the mapped object in the scene - image_2 )
 					  
 
 			
 						
-						//Posx, Posy
-						/*pospt.x=scene_corners[4].x;
-						pospt.y=scene_corners[4].y;
-						
-						//PosZ
-						refz=abs(obj_corners[1].x-obj_corners[0].x)*abs(obj_corners[3].y-obj_corners[0].y)*0.5;
-						pospt.z=(abs(scene_corners[1].x-scene_corners[0].x)*abs(scene_corners[3].y-scene_corners[0].y)/refz)-1;
-						if(abs(pospt.z)>1)
-							{pospt.z=pospt.z/abs(pospt.z);}					
-						printf("[%f,%f,%f] \n",pospt.x,pospt.y,pospt.z);*/
+
 						Mat img_matches;
 						
 						cv::Mat img_keypoints_2;
@@ -246,14 +245,16 @@ vector<double> distortion(5);
 					
 					//PNP stuff
 					solvePnP(Mat(obj_3D),Mat(scene_corners),Matrix,distortion,rvec,tvec,false,CV_ITERATIVE);
-					//solvePnP(Mat(col_3D),Mat(keyPointsBlob.pt),Matrix,distortion,rvec_col,tvec_col,false,CV_ITERATIVE);
-					
-					//cv::Mat R;
-					//cv::Rodrigues(rvec, R); // R is 3x3
-
-					//R = R.t();  // rotation of inverse
-					//tvec = -R * tvec; // translation of inverse
+					//printf("%f,%f,%f, FEATURE\n",tvec.at<double>(0,0),tvec.at<double>(1,0),tvec.at<double>(2,0));
 					//printf("[%f,%f,%f] \n",tvec.at<double>(0,0),tvec.at<double>(1,0),tvec.at<double>(2,0));
+					//Comparacion!
+					if(keyPointsBlob.size()==4)
+					{
+						float xmedia=tvec.at<double>(0,0)-tvec_col.at<double>(0,0);
+						float ymedia=tvec.at<double>(1,0)-tvec_col.at<double>(1,0);
+						float zmedia=tvec.at<double>(2,0)-tvec_col.at<double>(2,0);
+						printf("%f,%f,%f \n",xmedia,ymedia,zmedia);
+					}
 					//Watch out big values
 					if(abs(tvec.at<double>(0,0))>1500)
 					{tvec.at<double>(0,0)=tvec.at<double>(0,0)/abs(tvec.at<double>(0,0));}
@@ -288,7 +289,7 @@ vector<double> distortion(5);
 					punto.y=0;
 					punto.z=0.7;
 					found=0;
-					printf("holi \n");
+					printf("holi");
 				}
 
 				meas.at<float>(0) = punto.x;
@@ -337,8 +338,8 @@ vector<double> distortion(5);
 				pospt.z=estimated.at<float>(2);
 				myfile << pospt.x<<"   "<< punto.x<<"   "<< pospt.y<<"   "<< punto.y<<"   "<< pospt.z<<"   "<< punto.z<<"\n";
 				pub_point.publish(pospt);
-			cv::waitKey(20);
-			ros::spin();
+			cv::waitKey(15);
+			ros::spinOnce();
 			
 		  }
 
@@ -422,7 +423,5 @@ int main(int argc, char **argv)
 	cv::destroyWindow("view");
 	cv::destroyWindow("blob");
 }
-
-
 
 
