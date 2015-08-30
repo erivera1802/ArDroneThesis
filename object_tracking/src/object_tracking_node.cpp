@@ -72,11 +72,14 @@ vector<double> distortion(5);
 float estimatedx;
 float estimatedy;
 float estimatedz;
+float estimatedvx;
+float estimatedvy;
+float estimatedvz;
 
 	void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 	{
 		ros::Rate loop_rate(50);
-		ofstream myfile("/home/edrone/posicion_color19.txt",ios_base::app);
+		ofstream myfile("/home/edrone/posicion_color21.txt",ios_base::app);
 		int count=0;
 		
 		Point pt;
@@ -159,7 +162,7 @@ std::vector<Point2f> color_keypoints(4);
 					{tvec_col.at<double>(0,0)=xpast;}
 					if(abs(tvec_col.at<double>(1,0)-ypast)>500)
 					{tvec_col.at<double>(1,0)=ypast;}
-					if(abs(tvec_col.at<double>(2,0)-zpast)>500)
+					if(abs(tvec_col.at<double>(2,0)-zpast)>1)
 					{tvec_col.at<double>(2,0)=zpast;}
 					
 					
@@ -361,15 +364,22 @@ std::vector<Point2f> color_keypoints(4);
 
 				if(estimated.at<float>(0)!=estimated.at<float>(0))
 				{
-					found=0;
-					estimated.at<float>(0)=0;
-					estimated.at<float>(1)=0;
-					estimated.at<float>(2)=0.7;
-					estimated.at<float>(3)=0;
-					estimated.at<float>(4)=0;
-					estimated.at<float>(5)=0;
+					
+					estimated.at<float>(0)=estimatedx;
+					estimated.at<float>(1)=estimatedy;
+					estimated.at<float>(2)=estimatedz;
+					estimated.at<float>(3)=estimatedvx;
+					estimated.at<float>(4)=estimatedvy;
+					estimated.at<float>(5)=estimatedvz;
 					printf("hola");
 				}
+				estimatedx=estimated.at<float>(0);
+				estimatedy=estimated.at<float>(1);
+				estimatedz=estimated.at<float>(2);
+				estimatedvx=estimated.at<float>(3);
+				estimatedvy=estimated.at<float>(4);
+				estimatedvz=estimated.at<float>(5);
+
 				printf("[%f	%f,%f	%f,%f	%f] \n",estimated.at<float>(0),colorx,estimated.at<float>(1),colory,estimated.at<float>(2),colorz);
 				pospt.x=estimated.at<float>(0);
 				pospt.y=estimated.at<float>(1);
@@ -452,9 +462,9 @@ int main(int argc, char **argv)
 	kf.processNoiseCov.at<float>(3,3) = 1e-5;
 	kf.processNoiseCov.at<float>(4,4) = 1e-5;
 	kf.processNoiseCov.at<float>(5,5) = 1e-5;
-	kf.measurementNoiseCov.at<float>(0,0) = 1e-3;
-	kf.measurementNoiseCov.at<float>(1,1) = 1e-3;
-	kf.measurementNoiseCov.at<float>(2,2) = 1e-3;
+	kf.measurementNoiseCov.at<float>(0,0) = 5e-3;
+	kf.measurementNoiseCov.at<float>(1,1) = 5e-3;
+	kf.measurementNoiseCov.at<float>(2,2) = 1e-1;
 	
 	cv::setIdentity(kf.errorCovPost, cv::Scalar::all(0.1));
 
