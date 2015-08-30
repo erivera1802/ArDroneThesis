@@ -69,12 +69,14 @@ vector<double> distortion(5);
   	cv::Mat meas(measSize, 1, type);    // [z_x,z_y,z_z]
 
 	int found=0;
-
+float estimatedx;
+float estimatedy;
+float estimatedz;
 
 	void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 	{
 		ros::Rate loop_rate(50);
-		ofstream myfile("/home/edrone/posicion_color15.txt",ios_base::app);
+		ofstream myfile("/home/edrone/posicion_color19.txt",ios_base::app);
 		int count=0;
 		
 		Point pt;
@@ -177,25 +179,21 @@ std::vector<Point2f> color_keypoints(4);
 					meas.at<float>(1) = punto.y;
 					meas.at<float>(2) = punto.z;
 
-				state=kf.predict();
-	
-	
-				 estimated=kf.correct(meas);
 				}
 				else
 				{printf("kein keypoints \n");
 				
-					kf.errorCovPre.at<float>(0,0) = 1; // px
+					/*kf.errorCovPre.at<float>(0,0) = 1; // px
 					kf.errorCovPre.at<float>(1,1) = 1; // px
 					kf.errorCovPre.at<float>(2,2) = 1;
 					kf.errorCovPre.at<float>(3,3) = 1;
 					kf.errorCovPre.at<float>(4,4) = 1; // px
-					kf.errorCovPre.at<float>(5,5) = 1; // px					
+					kf.errorCovPre.at<float>(5,5) = 1; // px*/					
 					
-					state=kf.predict();
-					punto.x=0;
-					punto.y=0;
-					punto.z=0.7;
+
+					punto.x=xpast;
+					punto.y=ypast;
+					punto.z=zpast;
 					found=0;
 					printf("holi");
 				}
@@ -354,25 +352,7 @@ std::vector<Point2f> color_keypoints(4);
 
 
 				
-				if(found==0)
-				{
-				 	kf.errorCovPre.at<float>(0,0) = 1; // px
-					kf.errorCovPre.at<float>(1,1) = 1; // px
-					kf.errorCovPre.at<float>(2,2) = 1;
-					kf.errorCovPre.at<float>(3,3) = 1;
-					kf.errorCovPre.at<float>(4,4) = 1; // px
-					kf.errorCovPre.at<float>(5,5) = 1; // px
-		
-					state.at<float>(0) = meas.at<float>(0);
-					state.at<float>(1) = meas.at<float>(1);
-					state.at<float>(2) = meas.at<float>(2);
-					state.at<float>(3) = 0.0;
-					state.at<float>(4) = 0.0;
-					state.at<float>(5) = 0.0;
-		
-					// <<<< Initialization
-					found = 1;
-				}
+
 	
 				state=kf.predict();
 	
@@ -469,14 +449,14 @@ int main(int argc, char **argv)
 	kf.processNoiseCov.at<float>(0,0) = 1e-5;
 	kf.processNoiseCov.at<float>(1,1) = 1e-5;
 	kf.processNoiseCov.at<float>(2,2) = 1e-5;
-	kf.processNoiseCov.at<float>(3,3) = 2.0f;
-	kf.processNoiseCov.at<float>(4,4) = 2.0f;
-	kf.processNoiseCov.at<float>(5,5) = 2.0f;
-	kf.measurementNoiseCov.at<float>(0,0) = 1e-4.;
-	kf.measurementNoiseCov.at<float>(1,1) = 1e-4;
-	kf.measurementNoiseCov.at<float>(2,2) = 1e-4;
+	kf.processNoiseCov.at<float>(3,3) = 1e-5;
+	kf.processNoiseCov.at<float>(4,4) = 1e-5;
+	kf.processNoiseCov.at<float>(5,5) = 1e-5;
+	kf.measurementNoiseCov.at<float>(0,0) = 1e-3;
+	kf.measurementNoiseCov.at<float>(1,1) = 1e-3;
+	kf.measurementNoiseCov.at<float>(2,2) = 1e-3;
 	
-	cv::setIdentity(kf.errorCovPost, cv::Scalar::all(1));
+	cv::setIdentity(kf.errorCovPost, cv::Scalar::all(0.1));
 
 	//Subscribing to ardrone camera node
 	image_transport::ImageTransport it(nh);
