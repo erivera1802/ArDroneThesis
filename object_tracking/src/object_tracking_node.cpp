@@ -31,12 +31,12 @@ float ey,ez,ex;
 float refz;
 float xpast=0,ypast=0,zpast=0;
 //Values for Trackbar, Hue, Saturation Value
-int iLowH=160;
-int iHighH=179;
-int iLowS=131;
-int iHighS=211;
-int iLowV=146;
-int iHighV=248;
+int iLowH=55;
+int iHighH=91;
+int iLowS=85;
+int iHighS=255;
+int iLowV=64;
+int iHighV=255;
 //float PosX,PosY,PosZ;
 geometry_msgs::Point point_msg;
 std_msgs::Empty emp_msg;
@@ -45,7 +45,8 @@ geometry_msgs::Point punto;
 //blob detection
  SimpleBlobDetector::Params params;
     std::vector<Point3f> col_3D(4);   
-std::vector<Point2f> color_keypoints(4);         
+std::vector<Point2f> color_keypoints(4); 
+float colorx,colory,colorz;        
 //Color Trackbar
 
 //Camera Matrix:
@@ -73,7 +74,7 @@ vector<double> distortion(5);
 	void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 	{
 		ros::Rate loop_rate(50);
-		ofstream myfile("/home/edrone/pos.txt",ios_base::app);
+		ofstream myfile("/home/edrone/posicion_color15.txt",ios_base::app);
 		int count=0;
 		
 		Point pt;
@@ -107,12 +108,16 @@ std::vector<Point2f> color_keypoints(4);
 				cvCreateTrackbar("LowV", "blob", &iLowV, 255); 
 				cvCreateTrackbar("HighV", "blob", &iHighV, 255);
 				cv::inRange(gauss, cv::Scalar(iLowH,iLowS,iLowV), cv::Scalar(iHighH,iHighS,iHighV), gauss); 
-
+				imshow("view", gauss);
 				//Color reference
-				col_3D[0] = Point3f(-0.23,-0.245,0); 
-				col_3D[1] = Point3f(0.23,-0.245,0);
+				/*col_3D[0] = Point3f(-0.14,-0.08,0); 
+				col_3D[1] = Point3f(0.135,-0.08,0);
 				col_3D[2] = Point3f(-0.23,0.245,0); 
-				col_3D[3] = Point3f(0.23,0.245,0);
+				col_3D[3] = Point3f(0.23,0.245,0);*/ //For the red dots in the box
+				col_3D[0] = Point3f(-0.1875,-0.12,0); 
+				col_3D[1] = Point3f(0.1875,-0.12,0);
+				col_3D[2] = Point3f(-0.1875,0.12,0); 
+				col_3D[3] = Point3f(0.1875,0.12,0);
 				//Thresholding
 				cv::cvtColor(cv_ptr->image,img2,CV_BGR2GRAY);
 				Mat img1 = imread(image, CV_LOAD_IMAGE_GRAYSCALE );
@@ -137,10 +142,63 @@ std::vector<Point2f> color_keypoints(4);
 					solvePnP(Mat(col_3D),Mat(color_keypoints),Matrix,distortion,rvec_col,tvec_col,false,CV_ITERATIVE);
 					//printf("%f,%f,%f, COLOR \n",tvec_col.at<double>(0,0),tvec_col.at<double>(1,0),tvec_col.at<double>(2,0));
 					//printf("%f,%f \n",color_keypoints[2].x,color_keypoints[2].y);
+					colorx=tvec_col.at<double>(0,0);
+					colory=tvec_col.at<double>(1,0);
+					colorz=tvec_col.at<double>(2,0);
+					
+					if(abs(tvec_col.at<double>(0,0))>1500)
+					{tvec_col.at<double>(0,0)=tvec_col.at<double>(0,0)/abs(tvec_col.at<double>(0,0));}
+					if(abs(tvec_col.at<double>(1,0))>1500)
+					{tvec_col.at<double>(1,0)=tvec_col.at<double>(1,0)/abs(tvec_col.at<double>(1,0));}
+					if(abs(tvec_col.at<double>(2,0))>1500)
+					{tvec_col.at<double>(2,0)=tvec_col.at<double>(2,0)/abs(tvec_col.at<double>(2,0));}
+					//Watch out big changes
+					if(abs(tvec_col.at<double>(0,0)-xpast)>500)
+					{tvec_col.at<double>(0,0)=xpast;}
+					if(abs(tvec_col.at<double>(1,0)-ypast)>500)
+					{tvec_col.at<double>(1,0)=ypast;}
+					if(abs(tvec_col.at<double>(2,0)-zpast)>500)
+					{tvec_col.at<double>(2,0)=zpast;}
+					
+					
 
+
+
+					punto.x=tvec_col.at<double>(0,0);
+					punto.y=tvec_col.at<double>(1,0);
+					punto.z=tvec_col.at<double>(2,0);
+					
+					//imshow("view", img_matches );
+					xpast=tvec_col.at<double>(0,0);
+					ypast=tvec_col.at<double>(1,0);
+					zpast=tvec_col.at<double>(2,0);
+
+					meas.at<float>(0) = punto.x;
+					meas.at<float>(1) = punto.y;
+					meas.at<float>(2) = punto.z;
+
+				state=kf.predict();
+	
+	
+				 estimated=kf.correct(meas);
 				}
 				else
-				{printf("kein keypoints \n");}
+				{printf("kein keypoints \n");
+				
+					kf.errorCovPre.at<float>(0,0) = 1; // px
+					kf.errorCovPre.at<float>(1,1) = 1; // px
+					kf.errorCovPre.at<float>(2,2) = 1;
+					kf.errorCovPre.at<float>(3,3) = 1;
+					kf.errorCovPre.at<float>(4,4) = 1; // px
+					kf.errorCovPre.at<float>(5,5) = 1; // px					
+					
+					state=kf.predict();
+					punto.x=0;
+					punto.y=0;
+					punto.z=0.7;
+					found=0;
+					printf("holi");
+				}
 				//imshow("blob",gauss);
 				
 				//Detector, and extractor initializing
@@ -197,7 +255,7 @@ std::vector<Point2f> color_keypoints(4);
 				}
 				geometry_msgs::Point pospt;
 				
-				if(good_matches.size()>3)
+				/*if(good_matches.size()>3)
 				{
 					Mat H = findHomography( obj, scene, CV_RANSAC );
 				
@@ -253,35 +311,35 @@ std::vector<Point2f> color_keypoints(4);
 						float xmedia=tvec.at<double>(0,0)-tvec_col.at<double>(0,0);
 						float ymedia=tvec.at<double>(1,0)-tvec_col.at<double>(1,0);
 						float zmedia=tvec.at<double>(2,0)-tvec_col.at<double>(2,0);
-						printf("%f,%f,%f \n",xmedia,ymedia,zmedia);
+						//printf("%f,%f,%f \n",xmedia,ymedia,zmedia);
 					}
 					//Watch out big values
-					if(abs(tvec.at<double>(0,0))>1500)
-					{tvec.at<double>(0,0)=tvec.at<double>(0,0)/abs(tvec.at<double>(0,0));}
-					if(abs(tvec.at<double>(1,0))>1500)
-					{tvec.at<double>(1,0)=tvec.at<double>(1,0)/abs(tvec.at<double>(1,0));}
-					if(abs(tvec.at<double>(2,0))>1500)
-					{tvec.at<double>(2,0)=tvec.at<double>(2,0)/abs(tvec.at<double>(2,0));}
+					if(abs(tvec_col.at<double>(0,0))>1500)
+					{tvec_col.at<double>(0,0)=tvec_col.at<double>(0,0)/abs(tvec_col.at<double>(0,0));}
+					if(abs(tvec_col.at<double>(1,0))>1500)
+					{tvec_col.at<double>(1,0)=tvec_col.at<double>(1,0)/abs(tvec_col.at<double>(1,0));}
+					if(abs(tvec_col.at<double>(2,0))>1500)
+					{tvec_col.at<double>(2,0)=tvec_col.at<double>(2,0)/abs(tvec_col.at<double>(2,0));}
 					//Watch out big changes
-					if(abs(tvec.at<double>(0,0)-xpast)>500)
-					{tvec.at<double>(0,0)=xpast;}
-					if(abs(tvec.at<double>(1,0)-ypast)>500)
-					{tvec.at<double>(1,0)=ypast;}
-					if(abs(tvec.at<double>(2,0)-zpast)>500)
-					{tvec.at<double>(2,0)=zpast;}
+					if(abs(tvec_col.at<double>(0,0)-xpast)>500)
+					{tvec_col.at<double>(0,0)=xpast;}
+					if(abs(tvec_col.at<double>(1,0)-ypast)>500)
+					{tvec_col.at<double>(1,0)=ypast;}
+					if(abs(tvec_col.at<double>(2,0)-zpast)>500)
+					{tvec_col.at<double>(2,0)=zpast;}
 					
 					
 
 
 
-					punto.x=tvec.at<double>(0,0);
-					punto.y=tvec.at<double>(1,0);
-					punto.z=tvec.at<double>(2,0);
+					punto.x=tvec_col.at<double>(0,0);
+					punto.y=tvec_col.at<double>(1,0);
+					punto.z=tvec_col.at<double>(2,0);
 					
 					imshow("view", img_matches );
-					xpast=tvec.at<double>(0,0);
-					ypast=tvec.at<double>(1,0);
-					zpast=tvec.at<double>(2,0);
+					xpast=tvec_col.at<double>(0,0);
+					ypast=tvec_col.at<double>(1,0);
+					zpast=tvec_col.at<double>(2,0);
 				}
 				else
 				{
@@ -292,9 +350,8 @@ std::vector<Point2f> color_keypoints(4);
 					printf("holi");
 				}
 
-				meas.at<float>(0) = punto.x;
-				meas.at<float>(1) = punto.y;
-				meas.at<float>(2) = punto.z;
+				*/
+
 
 				
 				if(found==0)
@@ -321,22 +378,24 @@ std::vector<Point2f> color_keypoints(4);
 	
 	
 				 estimated=kf.correct(meas);
+
 				if(estimated.at<float>(0)!=estimated.at<float>(0))
 				{
 					found=0;
-					estimated.at<float>(0)=-200;
-					estimated.at<float>(1)=-170;
-					estimated.at<float>(2)=500;
+					estimated.at<float>(0)=0;
+					estimated.at<float>(1)=0;
+					estimated.at<float>(2)=0.7;
 					estimated.at<float>(3)=0;
 					estimated.at<float>(4)=0;
 					estimated.at<float>(5)=0;
 					printf("hola");
 				}
-				//printf("[%f,%f,%f] \n",estimated.at<float>(0),estimated.at<float>(1),estimated.at<float>(2));
+				printf("[%f	%f,%f	%f,%f	%f] \n",estimated.at<float>(0),colorx,estimated.at<float>(1),colory,estimated.at<float>(2),colorz);
 				pospt.x=estimated.at<float>(0);
 				pospt.y=estimated.at<float>(1);
 				pospt.z=estimated.at<float>(2);
-				myfile << pospt.x<<"   "<< punto.x<<"   "<< pospt.y<<"   "<< punto.y<<"   "<< pospt.z<<"   "<< punto.z<<"\n";
+				//myfile << pospt.x<<"   "<< punto.x<<"   "<< colorx<<"   "<< pospt.y<<"   "<< punto.y<<"   "<< colory<<"   "<< pospt.z<<"   "<< punto.z<<"   "<< colorz<<"\n";
+				myfile <<pospt.x<<"	"<<colorx<<"	"<<pospt.y<<"	"<<colory<<"	"<<pospt.z<<"	"<<colorz<<"\n";
 				pub_point.publish(pospt);
 			cv::waitKey(15);
 			ros::spinOnce();
@@ -407,14 +466,17 @@ int main(int argc, char **argv)
 	kf.measurementMatrix.at<float>(1,1) = 1.0f;
 	kf.measurementMatrix.at<float>(2,2) = 1.0f;
 	//Noise Covariance Matrix Q
-	kf.processNoiseCov.at<float>(0,0) = 1e-1;
-	kf.processNoiseCov.at<float>(1,1) = 1e-1;
-	kf.processNoiseCov.at<float>(2,2) = 1e-1;
+	kf.processNoiseCov.at<float>(0,0) = 1e-5;
+	kf.processNoiseCov.at<float>(1,1) = 1e-5;
+	kf.processNoiseCov.at<float>(2,2) = 1e-5;
 	kf.processNoiseCov.at<float>(3,3) = 2.0f;
 	kf.processNoiseCov.at<float>(4,4) = 2.0f;
 	kf.processNoiseCov.at<float>(5,5) = 2.0f;
+	kf.measurementNoiseCov.at<float>(0,0) = 1e-4.;
+	kf.measurementNoiseCov.at<float>(1,1) = 1e-4;
+	kf.measurementNoiseCov.at<float>(2,2) = 1e-4;
 	
-	cv::setIdentity(kf.measurementNoiseCov, cv::Scalar(1e-1));
+	cv::setIdentity(kf.errorCovPost, cv::Scalar::all(1));
 
 	//Subscribing to ardrone camera node
 	image_transport::ImageTransport it(nh);
