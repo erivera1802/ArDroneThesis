@@ -37,19 +37,17 @@ int iLowS=100;
 int iHighS=255;
 int iLowV=64;
 int iHighV=255;
-//float PosX,PosY,PosZ;
+//Message initialization
 geometry_msgs::Point point_msg;
 std_msgs::Empty emp_msg;
 geometry_msgs::Point punto;
 geometry_msgs::Point puntoc;
 
 //blob detection
- SimpleBlobDetector::Params params;
-    std::vector<Point3f> col_3D(4);   
+SimpleBlobDetector::Params params;
+std::vector<Point3f> col_3D(4);   
 std::vector<Point2f> color_keypoints(4); 
 float colorx,colory,colorz,fx,fy,fz;        
-//Color Trackbar
-
 //Camera Matrix:
 cv::Mat Matrix(3,3,CV_64F);
 //Translation and rotation matrices
@@ -59,27 +57,25 @@ cv::Mat tvec_col;
 cv::Mat rvec_col;
 cv::Mat estimated;
 cv::Mat estimatedc;
-cv::Mat estimatedzk;
+cv::Mat corrected;
 //Distortion Vector
 vector<double> distortion(5);
-	//Kalman Filter Initialization
-   int stateSize = 6;
-   int measSize = 3;
-   int contrSize = 0;
-   unsigned int type = CV_32F;
-	cv::KalmanFilter kf(stateSize, measSize, contrSize, type);
-	cv::Mat state(stateSize, 1, type);  // [x,y,z,v_x,v_y,v_z]
-  	cv::Mat meas(measSize, 1, type);    // [z_x,z_y,z_z]
+//Kalman Filter Initialization
+int stateSize = 6;
+int measSize = 3;
+int contrSize = 0;
+unsigned int type = CV_32F;
+cv::KalmanFilter kf(stateSize, measSize, contrSize, type);
+cv::Mat state(stateSize, 1, type);  // [x,y,z,v_x,v_y,v_z]
+cv::Mat meas(measSize, 1, type);    // [z_x,z_y,z_z]
 
-	cv::KalmanFilter kfc(stateSize, measSize, contrSize, type);
-	cv::Mat statec(stateSize, 1, type);  // [x,y,z,v_x,v_y,v_z]
-  	cv::Mat measc(measSize, 1, type);    // [z_x,z_y,z_z]
-
-	cv::KalmanFilter kfz(2, 1, 0, type);
-	cv::Mat statez(2, 1, type);  // [x,y,z,v_x,v_y,v_z]
-  	cv::Mat measz(1, 1, type);    // [z_x,z_y,z_z]
-
-	int found=0;
+cv::KalmanFilter kfc(stateSize, measSize, contrSize, type);
+cv::Mat statec(stateSize, 1, type);  // [x,y,z,v_x,v_y,v_z]
+cv::Mat measc(measSize, 1, type);    // [z_x,z_y,z_z]
+cv::Mat estimatedPast(stateSize,1,type);
+cv::Mat estimatedPastc(stateSize,1,type);
+int foundc=0;
+int foundf=0;
 //Simple Test Z
 float zar,zab,zprom;
 float estimatedx;
@@ -95,16 +91,65 @@ float estimatedcz;
 float estimatedcvx;
 float estimatedcvy;
 float estimatedcvz;
-
-float estimatedzz;
-float estimatedzvz;
-
-	void imageCallback(const sensor_msgs::ImageConstPtr& msg)
+cv::Mat EstimatedPose;
+cv::Mat State;
+geometry_msgs::Point Selection(geometry_msgs::Point Fea,geometry_msgs::Point Col,int F,int C)
+{
+	geometry_msgs::Point Preturn;
+	if(F && C)
+	{
+		Preturn.x=(Fea.x+Col.x)/2.0;
+		Preturn.y=(Fea.y+Col.y)/2.0;
+		Preturn.z=(Fea.z+Col.z)/2.0;		
+	}
+	else if (F==1 && C==0)
+	{
+		Preturn.x=Fea.x;
+		Preturn.y=Fea.y;
+		Preturn.z=Fea.z;
+	}
+	else if (F==0 && C==1)
+	{
+		Preturn.x=Col.x;
+		Preturn.y=Col.y;
+		Preturn.z=Col.z;
+	}
+	return Preturn;
+}
+Mat Kalman(Mat Measure,KalmanFilter K)
+{
+							
+	State=K.predict();	
+	EstimatedPose=K.correct(Measure);
+	return EstimatedPose;
+}
+Mat NaNCheck(Mat check,Mat past)
+{
+	if(check.at<float>(0)!=check.at<float>(0))
+		{
+			
+		check.at<float>(0)=past.at<float>(0);
+		check.at<float>(1)=past.at<float>(1);
+		check.at<float>(2)=past.at<float>(2);
+		check.at<float>(3)=past.at<float>(3);
+		check.at<float>(4)=past.at<float>(4);
+		check.at<float>(5)=past.at<float>(5);
+		printf("hola");
+		}
+		past.at<float>(0)=check.at<float>(0);
+		past.at<float>(1)=check.at<float>(1);
+		past.at<float>(2)=check.at<float>(2);
+		past.at<float>(3)=check.at<float>(3);
+		past.at<float>(4)=check.at<float>(4);
+		past.at<float>(5)=check.at<float>(5);
+	return check;
+}
+void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 	{
 		ros::Rate loop_rate(50);
-		ofstream myfile("/home/edrone/ComparacionZTodos2.txt",ios_base::app);
+		ofstream myfile("/home/edrone/Pose3.txt",ios_base::app);
 		int count=0;
-		
+		//Node initialization
 		Point pt;
 		ros::NodeHandle neu;
 		ros::Publisher pub_empty_land;
@@ -114,12 +159,11 @@ float estimatedzvz;
 		//Communicating between ROS an OpenCV
 		cv_bridge::CvImagePtr cv_ptr; 
 		cv::Mat img_thr;
-		    std::vector<Point3f> col_3D(4);   
-std::vector<Point2f> color_keypoints(4);  
+		std::vector<Point3f> col_3D(4);   
+		std::vector<Point2f> color_keypoints(4);  
 		  try
 		  {
-
-
+				//Color Tracking Initialization
 				std::string image = ros::package::getPath("stream") + "/src/gbox.jpg";
 				cv_ptr=cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
 				cv::Mat img2;
@@ -141,11 +185,7 @@ std::vector<Point2f> color_keypoints(4);
 				col_3D[0] = Point3f(-0.115,-0.08,0); 
 				col_3D[1] = Point3f(0.115,-0.08,0);
 				col_3D[2] = Point3f(-0.24,0.245,0); 
-				col_3D[3] = Point3f(0.24,0.245,0); //For the red dots in the box
-				/*col_3D[0] = Point3f(-0.1875,-0.12,0); 
-				col_3D[1] = Point3f(0.1875,-0.12,0);
-				col_3D[2] = Point3f(-0.1875,0.12,0); 
-				col_3D[3] = Point3f(0.1875,0.12,0);*///For the closet dots
+				col_3D[3] = Point3f(0.24,0.245,0);
 				//Thresholding
 				cv::cvtColor(cv_ptr->image,img2,CV_BGR2GRAY);
 				Mat img1 = imread(image, CV_LOAD_IMAGE_GRAYSCALE );
@@ -157,9 +197,8 @@ std::vector<Point2f> color_keypoints(4);
 				//Blob detection
 				vector<KeyPoint> keyPointsBlob;
 				SimpleBlobDetector blobDetector( params );
-				
 				blobDetector.detect( gauss, keyPointsBlob );
-				if(keyPointsBlob.size()==4)
+				if(keyPointsBlob.size()==4)//Just work if find 4 blobs
 				{
 					drawKeypoints(gauss,keyPointsBlob,blobs,Scalar::all(-1),DrawMatchesFlags::DEFAULT);
 					imshow("blob", blobs );
@@ -167,14 +206,10 @@ std::vector<Point2f> color_keypoints(4);
 					{
 						color_keypoints[a]=keyPointsBlob[a].pt;
 					}
-					/*Test for simplier Z*/
-					zar=color_keypoints[0].x-color_keypoints[1].x;
-					zab=color_keypoints[2].x-color_keypoints[3].x;
-					zprom=abs(zar+zab)/2.0;
-					measz=zprom;
+
+					//PnP color Stuff
 					solvePnP(Mat(col_3D),Mat(color_keypoints),Matrix,distortion,rvec_col,tvec_col,false,CV_ITERATIVE);
-					//printf("%f,%f,%f, COLOR \n",tvec_col.at<double>(0,0),tvec_col.at<double>(1,0),tvec_col.at<double>(2,0));
-					//printf("%f,%f \n",color_keypoints[2].x,color_keypoints[2].y);
+
 					colorx=tvec_col.at<double>(0,0);
 					colory=tvec_col.at<double>(1,0);
 					colorz=tvec_col.at<double>(2,0);
@@ -205,33 +240,26 @@ std::vector<Point2f> color_keypoints(4);
 					xpastc=tvec_col.at<double>(0,0);
 					ypastc=tvec_col.at<double>(1,0);
 					zpastc=tvec_col.at<double>(2,0);
-
-					measc.at<float>(0) = puntoc.x;//Uncomment for color
+					//Straight to Kalman
+					measc.at<float>(0) = puntoc.x;
 					measc.at<float>(1) = puntoc.y;
 					measc.at<float>(2) = puntoc.z;
+
+					foundc=1;
 
 				}
 				else
-				{//printf("kein keypoints \n");
-				
-					/*kf.errorCovPre.at<float>(0,0) = 1; // px
-					kf.errorCovPre.at<float>(1,1) = 1; // px
-					kf.errorCovPre.at<float>(2,2) = 1;
-					kf.errorCovPre.at<float>(3,3) = 1;
-					kf.errorCovPre.at<float>(4,4) = 1; // px
-					kf.errorCovPre.at<float>(5,5) = 1; // px*/					
-					
-
+				{										
 					puntoc.x=xpastc;
 					puntoc.y=ypastc;
 					puntoc.z=zpastc;
-					measc.at<float>(0) = puntoc.x;//Uncomment for color
+					measc.at<float>(0) = puntoc.x;
 					measc.at<float>(1) = puntoc.y;
 					measc.at<float>(2) = puntoc.z;
-					found=0;
+					foundc=0;
 					printf("holi");
+					imshow("blob", gauss );
 				}
-				//imshow("blob",gauss);
 				
 				//Detector, and extractor initializing
 				//Detector, and extractor initializing
@@ -269,7 +297,7 @@ std::vector<Point2f> color_keypoints(4);
 				//Good Matches Selection
 				for (int i = 0; i < matches.size(); ++i)
 				{
-				    const float ratio = 0.7; // As in Lowe's paper; can be tuned
+				    const float ratio = 0.6; // As in Lowe's paper; can be tuned
 				    if (matches[i][0].distance < ratio * matches[i][1].distance)
 				    {
 					good_matches.push_back(matches[i][0]);
@@ -287,7 +315,7 @@ std::vector<Point2f> color_keypoints(4);
 				}
 				geometry_msgs::Point pospt;
 				
-				if(good_matches.size()>3)
+				if(good_matches.size()>5)
 				{
 					Mat H = findHomography( obj, scene, CV_RANSAC );
 				
@@ -338,16 +366,6 @@ std::vector<Point2f> color_keypoints(4);
 					zprom=abs(zar+zab)/2.0;
 					//PNP stuff
 					solvePnP(Mat(obj_3D),Mat(scene_corners),Matrix,distortion,rvec,tvec,false,CV_ITERATIVE);
-					//printf("%f,%f,%f, FEATURE\n",tvec.at<double>(0,0),tvec.at<double>(1,0),tvec.at<double>(2,0));
-					//printf("[%f,%f,%f] \n",tvec.at<double>(0,0),tvec.at<double>(1,0),tvec.at<double>(2,0));
-					//Comparacion!
-					/*if(keyPointsBlob.size()==4)
-					{
-						float xmedia=tvec.at<double>(0,0)-tvec_col.at<double>(0,0);
-						float ymedia=tvec.at<double>(1,0)-tvec_col.at<double>(1,0);
-						float zmedia=tvec.at<double>(2,0)-tvec_col.at<double>(2,0);
-						//printf("%f,%f,%f \n",xmedia,ymedia,zmedia);
-					}*/
 					//Watch out big values
 					if(abs(tvec.at<double>(0,0))>1500)
 					{tvec.at<double>(0,0)=tvec.at<double>(0,0)/abs(tvec.at<double>(0,0));}
@@ -374,7 +392,7 @@ std::vector<Point2f> color_keypoints(4);
 					fx=tvec.at<double>(0,0);
 					fy=tvec.at<double>(1,0);
 					fz=tvec.at<double>(2,0);
-
+					//Straight to Kalman
 					meas.at<float>(0) = punto.x;
 					meas.at<float>(1) = punto.y;
 					meas.at<float>(2) = punto.z;
@@ -382,6 +400,7 @@ std::vector<Point2f> color_keypoints(4);
 					xpast=tvec.at<double>(0,0);
 					ypast=tvec.at<double>(1,0);
 					zpast=tvec.at<double>(2,0);
+					foundf=1;
 				}
 				else
 				{
@@ -391,8 +410,9 @@ std::vector<Point2f> color_keypoints(4);
 					meas.at<float>(0) = punto.x;
 					meas.at<float>(1) = punto.y;
 					meas.at<float>(2) = punto.z;
-					found=0;
-					printf("holi");
+					foundf=0;
+					printf("hole");
+					
 				}
 
 				
@@ -400,63 +420,15 @@ std::vector<Point2f> color_keypoints(4);
 
 				
 
-	
-				state=kf.predict();
-				statec=kfc.predict();
-				statez=kfz.predict();
-	
-				 estimated=kf.correct(meas);
-				 estimatedc=kfc.correct(measc);
-				estimatedzk=kfz.correct(measz);
+				//Kalman Prediction and Correction	
+				estimatedc=Kalman(measc,kfc);
+				estimated=Kalman(meas,kf);
+				//Check for Nan
+				estimated=NaNCheck(estimated,estimatedPast);
+				estimatedc=NaNCheck(estimatedc,estimatedPastc);
+		
 
-				if(estimated.at<float>(0)!=estimated.at<float>(0))
-				{
-					
-					estimated.at<float>(0)=estimatedx;
-					estimated.at<float>(1)=estimatedy;
-					estimated.at<float>(2)=estimatedz;
-					estimated.at<float>(3)=estimatedvx;
-					estimated.at<float>(4)=estimatedvy;
-					estimated.at<float>(5)=estimatedvz;
-					printf("hola");
-				}
-				estimatedx=estimated.at<float>(0);
-				estimatedy=estimated.at<float>(1);
-				estimatedz=estimated.at<float>(2);
-				estimatedvx=estimated.at<float>(3);
-				estimatedvy=estimated.at<float>(4);
-				estimatedvz=estimated.at<float>(5);
-
-				if(estimatedc.at<float>(0)!=estimatedc.at<float>(0))
-				{
-					
-					estimatedc.at<float>(0)=estimatedcx;
-					estimatedc.at<float>(1)=estimatedcy;
-					estimatedc.at<float>(2)=estimatedcz;
-					estimatedc.at<float>(3)=estimatedcvx;
-					estimatedc.at<float>(4)=estimatedcvy;
-					estimatedc.at<float>(5)=estimatedcvz;
-					printf("hola");
-				}
-				estimatedcx=estimatedc.at<float>(0);
-				estimatedcy=estimatedc.at<float>(1);
-				estimatedcz=estimatedc.at<float>(2);
-				estimatedcvx=estimatedc.at<float>(3);
-				estimatedcvy=estimatedc.at<float>(4);
-				estimatedcvz=estimatedc.at<float>(5);
-
-				if(estimatedzk.at<float>(0)!=estimatedzk.at<float>(0))
-				{
-					
-					estimatedzk.at<float>(0)=estimatedzz;
-					estimatedzk.at<float>(1)=estimatedzvz;
-					printf("hola");
-				}
-				estimatedzz=estimatedzk.at<float>(0);
-				estimatedzvz=estimatedzk.at<float>(1);
-
-				//printf("[%f	%f,%f	%f,%f	%f] \n",estimated.at<float>(0),colorx,estimated.at<float>(1),colory,estimated.at<float>(2),colorz);
-				
+				//Save Kalman for ROS message				
 				pospt.x=estimated.at<float>(0);
 				pospt.y=estimated.at<float>(1);
 				pospt.z=estimated.at<float>(2);
@@ -465,16 +437,12 @@ std::vector<Point2f> color_keypoints(4);
 				posptc.y=estimatedc.at<float>(1);
 				posptc.z=estimatedc.at<float>(2);
 
-				/*posptav.x=(pospt.x+posptc.x)/2;
-				posptav.y=(pospt.y+posptc.y)/2;
-				posptav.z=pospt.z;*/
 				posptav.x=(pospt.x+posptc.x)/2;
 				posptav.y=(pospt.y+posptc.y)/2;
 				posptav.z=(pospt.z+posptc.z)/2;
-				//printf("[%f	%f	%f] \n",posptav.x,posptav.y,posptav.z);
-				//myfile <<pospt.x<<"	"<<posptc.x<<"	"<<pospt.y<<"	"<<posptc.y<<"	"<<pospt.z<<"	"<<posptc.z<<"\n";
-				printf("[%f	%f	%f	%f] \n",fz,posptc.z,zprom,estimatedzk.at<float>(0));
-				myfile <<posptav.z<<"	"<<posptc.z<<"	"<<pospt.z<<"	"<<posptav.x<<"	"<<posptc.x<<"	"<<pospt.x<<"	"<<posptav.y<<"	"<<posptc.y<<"	"<<pospt.y<<"\n";
+				//posptav=Selection(pospt,posptc,foundf,foundc);
+				printf("[%f	%f	%f] \n",posptav.x,posptav.y,posptav.z);
+				myfile <<posptav.x<<"	"<<posptc.x<<"	"<<pospt.x<<"	"<<posptav.y<<"	"<<posptc.y<<"	"<<pospt.y<<"	"<<posptav.z<<"	"<<posptc.z<<"	"<<pospt.z<<"\n";
 				pub_point.publish(posptav);
 			cv::waitKey(15);
 			ros::spinOnce();
@@ -510,9 +478,9 @@ int main(int argc, char **argv)
 	
         params.maxArea = 8000;
         params.maxConvexity = 10;
-	  params.filterByInertia = false;
-  params.filterByConvexity = false;
-  params.filterByArea = true;
+	params.filterByInertia = false;
+  	params.filterByConvexity = false;
+  	params.filterByArea = true;
         params.filterByColor = false;
         params.filterByCircularity = false;
 	params.blobColor = 220;	
@@ -554,8 +522,8 @@ int main(int argc, char **argv)
 	kf.processNoiseCov.at<float>(3,3) = 1e-5;
 	kf.processNoiseCov.at<float>(4,4) = 1e-5;
 	kf.processNoiseCov.at<float>(5,5) = 1e-5;
-	kf.measurementNoiseCov.at<float>(0,0) = 5e-4;
-	kf.measurementNoiseCov.at<float>(1,1) = 5e-4;
+	kf.measurementNoiseCov.at<float>(0,0) = 1e-3;
+	kf.measurementNoiseCov.at<float>(1,1) = 1e-3;
 	kf.measurementNoiseCov.at<float>(2,2) = 1e-1;
 	
 	cv::setIdentity(kf.errorCovPost, cv::Scalar::all(0.1));
@@ -578,27 +546,25 @@ int main(int argc, char **argv)
 	kfc.processNoiseCov.at<float>(3,3) = 1e-5;
 	kfc.processNoiseCov.at<float>(4,4) = 1e-5;
 	kfc.processNoiseCov.at<float>(5,5) = 1e-5;
-	kfc.measurementNoiseCov.at<float>(0,0) = 5e-4;
-	kfc.measurementNoiseCov.at<float>(1,1) = 5e-4;
+	kfc.measurementNoiseCov.at<float>(0,0) = 1e-3;
+	kfc.measurementNoiseCov.at<float>(1,1) = 1e-3;
 	kfc.measurementNoiseCov.at<float>(2,2) = 1e-1;
 	
 	cv::setIdentity(kfc.errorCovPost, cv::Scalar::all(0.1));
 
-
-	//ZKalmanFilter
-	//Transition Matrix A
-	cv::setIdentity(kfz.transitionMatrix);
-	kfz.transitionMatrix.at<float>(0,1)=dt;
-	//Measurement Matrix H
-	kfz.measurementMatrix = cv::Mat::zeros(1, 2, type);
-	kfz.measurementMatrix.at<float>(0,0) = 1.0f;
-	//Noise Covariance Matrix Q
-	kfz.processNoiseCov.at<float>(0,0) = 1e-5;
-	kfz.processNoiseCov.at<float>(1,1) = 1e-5;
-	kfz.measurementNoiseCov.at<float>(0,0) = 5e-4;
-	
-	cv::setIdentity(kfz.errorCovPost, cv::Scalar::all(0.1));
-
+	//Trouble with estimated
+	estimatedPast.at<float>(0)=0.0;
+	estimatedPast.at<float>(1)=0.0;
+	estimatedPast.at<float>(2)=0.0;
+	estimatedPast.at<float>(3)=0.0;
+	estimatedPast.at<float>(4)=0.0;
+	estimatedPast.at<float>(5)=0.0;
+	estimatedPastc.at<float>(0)=0.0;
+	estimatedPastc.at<float>(1)=0.0;
+	estimatedPastc.at<float>(2)=0.0;
+	estimatedPastc.at<float>(3)=0.0;
+	estimatedPastc.at<float>(4)=0.0;
+	estimatedPastc.at<float>(5)=0.0;
 	//Subscribing to ardrone camera node
 	image_transport::ImageTransport it(nh);
 	image_transport::Subscriber sub = it.subscribe("/ardrone/image_raw", 1, imageCallback);
