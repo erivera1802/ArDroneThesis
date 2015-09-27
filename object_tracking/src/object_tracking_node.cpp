@@ -69,9 +69,10 @@ cv::KalmanFilter kf(stateSize, measSize, contrSize, type);
 cv::Mat state(stateSize, 1, type);  // [x,y,z,v_x,v_y,v_z]
 cv::Mat meas(measSize, 1, type);    // [z_x,z_y,z_z]
 
-cv::KalmanFilter kfc(stateSize, measSize, contrSize, type);
+cv::KalmanFilter kfc(stateSize, measSize, 3, type);
 cv::Mat statec(stateSize, 1, type);  // [x,y,z,v_x,v_y,v_z]
 cv::Mat measc(measSize, 1, type);    // [z_x,z_y,z_z]
+cv::Mat cn(3,1,type);
 cv::Mat estimatedPast(stateSize,1,type);
 cv::Mat estimatedPastc(stateSize,1,type);
 int foundc=0;
@@ -93,14 +94,32 @@ float estimatedcvy;
 float estimatedcvz;
 cv::Mat EstimatedPose;
 cv::Mat State;
+Mat PnPStuff(Mat Obj3D,Mat color_key,Mat Matric,Mat distortionv,Mat rve,Mat tve,float xp,float yp,float zp)
+{
+	solvePnP(Obj3D,color_key,Matric,distortionv,rve,tve,false,CV_ITERATIVE);
+	if(abs(tve.at<double>(0,0))>1500)
+	{tve.at<double>(0,0)=tve.at<double>(0,0)/abs(tve.at<double>(0,0));}
+	if(abs(tve.at<double>(1,0))>1500)
+	{tve.at<double>(1,0)=tve.at<double>(1,0)/abs(tve.at<double>(1,0));}
+	if(abs(tve.at<double>(2,0))>1500)
+	{tve.at<double>(2,0)=tve.at<double>(2,0)/abs(tve.at<double>(2,0));}
+	//Watch out big changes
+	if(abs(tve.at<double>(0,0)-xp)>500)
+	{tve.at<double>(0,0)=xp;}
+	if(abs(tve.at<double>(1,0)-yp)>500)
+	{tve.at<double>(1,0)=yp;}
+	if(abs(tve.at<double>(2,0)-zp)>1)
+	{tve.at<double>(2,0)=zp;}
+	
+}
 geometry_msgs::Point Selection(geometry_msgs::Point Fea,geometry_msgs::Point Col,int F,int C)
 {
 	geometry_msgs::Point Preturn;
 	if(F && C)
 	{
 		Preturn.x=(Fea.x+Col.x)/2.0;
-		Preturn.y=(Fea.y+Col.y)/2.0;
-		Preturn.z=(Fea.z+Col.z)/2.0;		
+		Preturn.y=(2*Fea.y+Col.y)/3.0;
+		Preturn.z=(2*Fea.z+Col.z)/3.0;		
 	}
 	else if (F==1 && C==0)
 	{
@@ -147,7 +166,7 @@ Mat NaNCheck(Mat check,Mat past)
 void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 	{
 		ros::Rate loop_rate(50);
-		ofstream myfile("/home/edrone/Pose4.txt",ios_base::app);
+		ofstream myfile("/home/edrone/VelocidadesEstimadas.txt",ios_base::app);
 		int count=0;
 		//Node initialization
 		Point pt;
@@ -315,7 +334,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 				}
 				geometry_msgs::Point pospt;
 				
-				if(good_matches.size()>7)
+				if(good_matches.size()>9)
 				{
 					Mat H = findHomography( obj, scene, CV_RANSAC );
 				
@@ -337,14 +356,8 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 					perspectiveTransform( obj_corners, scene_corners, H);
 
 	  //-- Draw lines between the corners (the mapped object in the scene - image_2 )
-					  
-
-			
-						
-
-						Mat img_matches;
-						
-						cv::Mat img_keypoints_2;
+					Mat img_matches;
+					cv::Mat img_keypoints_2;
 
 			  		  drawMatches(  img2, keypoints2,img1, keypoints1,good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
 		
@@ -421,7 +434,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 				
 
 				//Kalman Prediction and Correction	
-				estimatedc=Kalman(measc,kfc);
+				estimatedc=Kalman(meas,kfc);
 				estimated=Kalman(meas,kf);
 				//Check for Nan
 				estimated=NaNCheck(estimated,estimatedPast);
@@ -437,13 +450,14 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 				posptc.y=estimatedc.at<float>(1);
 				posptc.z=estimatedc.at<float>(2);
 
-				posptav.x=(pospt.x+posptc.x)/2;
+				/*posptav.x=(pospt.x+posptc.x)/2;
 				posptav.y=(pospt.y+posptc.y)/2;
-				posptav.z=(pospt.z+posptc.z)/2;
-				//posptav=Selection(pospt,posptc,foundf,foundc);
-				printf("[%f	%f	%f] \n",posptav.x,posptav.y,posptav.z);
-				myfile <<posptav.x<<"	"<<posptc.x<<"	"<<pospt.x<<"	"<<posptav.y<<"	"<<posptc.y<<"	"<<pospt.y<<"	"<<posptav.z<<"	"<<posptc.z<<"	"<<pospt.z<<"\n";
-				pub_point.publish(posptav);
+				posptav.z=(pospt.z+posptc.z)/2;*/
+				posptav=Selection(pospt,posptc,foundf,foundc);
+				printf("[%f	%f	%f	%f] \n",posptav.x,posptc.x,posptav.y,posptc.y);
+				//myfile <<posptav.x<<"	"<<posptc.x<<"	"<<pospt.x<<"	"<<posptav.y<<"	"<<posptc.y<<"	"<<pospt.y<<"	"<<posptav.z<<"	"<<posptc.z<<"	"<<pospt.z<<"\n";
+				myfile <<estimatedc.at<float>(3)<<"	"<<estimatedc.at<float>(4)<<"	"<<estimatedc.at<float>(5)<<"\n";				
+			pub_point.publish(posptav);
 			cv::waitKey(15);
 			ros::spinOnce();
 			
@@ -507,9 +521,18 @@ int main(int argc, char **argv)
 	//Feature Kalman Filter
 	//Transition Matrix A
 	cv::setIdentity(kf.transitionMatrix);
-	kf.transitionMatrix.at<float>(0,3)=dt;
-	kf.transitionMatrix.at<float>(1,4)=dt;
-	kf.transitionMatrix.at<float>(2,5)=dt;
+	kf.transitionMatrix = cv::Mat::zeros(stateSize, stateSize, type);
+	kf.transitionMatrix.at<float>(0,3)=40;
+	kf.transitionMatrix.at<float>(1,4)=25;
+	kf.transitionMatrix.at<float>(2,5)=20;
+	kf.transitionMatrix.at<float>(3,3)=-10;
+	kf.transitionMatrix.at<float>(4,4)=-10;
+	kf.transitionMatrix.at<float>(5,5)=-10;
+	//control matrix
+	kf.controlMatrix=cv::Mat::zeros(7,3,type);
+	kf.controlMatrix.at<float>(3,0)=6;
+	kf.controlMatrix.at<float>(4,1)=4.5;
+	kf.controlMatrix.at<float>(5,2)=100;
 	//Measurement Matrix H
 	kf.measurementMatrix = cv::Mat::zeros(measSize, stateSize, type);
 	kf.measurementMatrix.at<float>(0,0) = 1.0f;
@@ -530,10 +553,18 @@ int main(int argc, char **argv)
 
 	//Color Kalman Filter
 	//Transition Matrix A
-	cv::setIdentity(kfc.transitionMatrix);
-	kfc.transitionMatrix.at<float>(0,3)=dt;
-	kfc.transitionMatrix.at<float>(1,4)=dt;
-	kfc.transitionMatrix.at<float>(2,5)=dt;
+	kfc.transitionMatrix = cv::Mat::zeros(stateSize, stateSize, type);
+	kfc.transitionMatrix.at<float>(0,3)=40;
+	kfc.transitionMatrix.at<float>(1,4)=25;
+	kfc.transitionMatrix.at<float>(2,5)=20;
+	kfc.transitionMatrix.at<float>(3,3)=-10;
+	kfc.transitionMatrix.at<float>(4,4)=-10;
+	kfc.transitionMatrix.at<float>(5,5)=-10;
+	//control matrix
+	kfc.controlMatrix=cv::Mat::zeros(7,3,type);
+	kfc.controlMatrix.at<float>(3,0)=6;
+	kfc.controlMatrix.at<float>(4,1)=4.5;
+	kfc.controlMatrix.at<float>(5,2)=100;
 	//Measurement Matrix H
 	kfc.measurementMatrix = cv::Mat::zeros(measSize, stateSize, type);
 	kfc.measurementMatrix.at<float>(0,0) = 1.0f;
@@ -543,9 +574,9 @@ int main(int argc, char **argv)
 	kfc.processNoiseCov.at<float>(0,0) = 1e-5;
 	kfc.processNoiseCov.at<float>(1,1) = 1e-5;
 	kfc.processNoiseCov.at<float>(2,2) = 1e-5;
-	kfc.processNoiseCov.at<float>(3,3) = 1e-5;
-	kfc.processNoiseCov.at<float>(4,4) = 1e-5;
-	kfc.processNoiseCov.at<float>(5,5) = 1e-5;
+	kfc.processNoiseCov.at<float>(3,3) = 1e-4;
+	kfc.processNoiseCov.at<float>(4,4) = 1e-4;
+	kfc.processNoiseCov.at<float>(5,5) = 1e-4;
 	kfc.measurementNoiseCov.at<float>(0,0) = 1e-3;
 	kfc.measurementNoiseCov.at<float>(1,1) = 1e-3;
 	kfc.measurementNoiseCov.at<float>(2,2) = 1e-1;
