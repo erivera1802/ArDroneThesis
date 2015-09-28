@@ -42,6 +42,7 @@ geometry_msgs::Point point_msg;
 std_msgs::Empty emp_msg;
 geometry_msgs::Point punto;
 geometry_msgs::Point puntoc;
+geometry_msgs::Twist twist_msg;
 
 //blob detection
 SimpleBlobDetector::Params params;
@@ -94,9 +95,28 @@ float estimatedcvy;
 float estimatedcvz;
 cv::Mat EstimatedPose;
 cv::Mat State;
-Mat PnPStuff(Mat Obj3D,Mat color_key,Mat Matric,Mat distortionv,Mat rve,Mat tve,float xp,float yp,float zp)
+cv::Mat Control(3,1,type);
+cv::Mat Reference(3,1,type);
+Mat PID(geometry_msgs::Point Pose,Mat reference)
 {
-	solvePnP(Obj3D,color_key,Matric,distortionv,rve,tve,false,CV_ITERATIVE);
+	float ex,ey,ez,dex,dey,dez;
+	float kx=1;
+	float ky=1;
+	float kz=1;
+	Mat control(3,1,type);
+	ex=reference.at<float>(0)-Pose.x;
+	ey=reference.at<float>(1)-Pose.y;
+	ez=reference.at<float>(2)-Pose.z;
+	control.at<float>(0)=kx*ex;
+	control.at<float>(1)=ky*ey;
+	control.at<float>(2)=kz*ez;
+	return control;
+	
+
+}
+Mat PnPStuff(std::vector<Point3f> Obj3D,std::vector<Point2f> color_key,Mat Matric,vector<double> distortionv,Mat rve,Mat tve,float xp,float yp,float zp)
+{
+	solvePnP(Mat(Obj3D),Mat(color_key),Matric,distortionv,rve,tve,false,CV_ITERATIVE);
 	if(abs(tve.at<double>(0,0))>1500)
 	{tve.at<double>(0,0)=tve.at<double>(0,0)/abs(tve.at<double>(0,0));}
 	if(abs(tve.at<double>(1,0))>1500)
@@ -110,6 +130,7 @@ Mat PnPStuff(Mat Obj3D,Mat color_key,Mat Matric,Mat distortionv,Mat rve,Mat tve,
 	{tve.at<double>(1,0)=yp;}
 	if(abs(tve.at<double>(2,0)-zp)>1)
 	{tve.at<double>(2,0)=zp;}
+	return tve;
 	
 }
 geometry_msgs::Point Selection(geometry_msgs::Point Fea,geometry_msgs::Point Col,int F,int C)
@@ -173,6 +194,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 		ros::NodeHandle neu;
 		ros::Publisher pub_empty_land;
 		ros::Publisher pub_point=neu.advertise<geometry_msgs::Point>("color_position",1);
+		ros::Publisher pub_control=neu.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
 		pub_empty_land = neu.advertise<std_msgs::Empty>("/ardrone/land", 1); /* Message queue length is just 1 */
 	
 		//Communicating between ROS an OpenCV
@@ -227,7 +249,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 					}
 
 					//PnP color Stuff
-					solvePnP(Mat(col_3D),Mat(color_keypoints),Matrix,distortion,rvec_col,tvec_col,false,CV_ITERATIVE);
+					/*solvePnP(Mat(col_3D),Mat(color_keypoints),Matrix,distortion,rvec_col,tvec_col,false,CV_ITERATIVE);
 
 					colorx=tvec_col.at<double>(0,0);
 					colory=tvec_col.at<double>(1,0);
@@ -245,7 +267,8 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 					if(abs(tvec_col.at<double>(1,0)-ypastc)>500)
 					{tvec_col.at<double>(1,0)=ypastc;}
 					if(abs(tvec_col.at<double>(2,0)-zpastc)>1)
-					{tvec_col.at<double>(2,0)=zpastc;}
+					{tvec_col.at<double>(2,0)=zpastc;}*/
+					tvec_col=PnPStuff(col_3D,color_keypoints,Matrix,distortion,rvec_col,tvec_col,xpastc,ypastc,zpastc);
 					
 					
 
@@ -378,7 +401,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 					zab=scene_corners[2].x-scene_corners[3].x;
 					zprom=abs(zar+zab)/2.0;
 					//PNP stuff
-					solvePnP(Mat(obj_3D),Mat(scene_corners),Matrix,distortion,rvec,tvec,false,CV_ITERATIVE);
+					/*solvePnP(Mat(obj_3D),Mat(scene_corners),Matrix,distortion,rvec,tvec,false,CV_ITERATIVE);
 					//Watch out big values
 					if(abs(tvec.at<double>(0,0))>1500)
 					{tvec.at<double>(0,0)=tvec.at<double>(0,0)/abs(tvec.at<double>(0,0));}
@@ -393,7 +416,8 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 					{tvec.at<double>(1,0)=ypast;}
 					if(abs(tvec.at<double>(2,0)-zpast)>500)
 					{tvec.at<double>(2,0)=zpast;}
-					
+					*/
+					tvec=PnPStuff(obj_3D,scene_corners,Matrix,distortion,rvec,tvec,xpast,ypast,zpast);
 					
 
 
@@ -454,10 +478,15 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 				posptav.y=(pospt.y+posptc.y)/2;
 				posptav.z=(pospt.z+posptc.z)/2;*/
 				posptav=Selection(pospt,posptc,foundf,foundc);
-				printf("[%f	%f	%f	%f] \n",pospt.x,posptc.x,pospt.z,posptc.z);
+				Control=PID(posptav,Reference);
+				twist_msg.linear.x=Control.at<float>(2);
+				twist_msg.linear.y=Control.at<float>(0);
+				twist_msg.linear.z=Control.at<float>(1);
+				printf("[%f	%f	%f] \n",Control.at<float>(0),Control.at<float>(1),Control.at<float>(2));
 				//myfile <<posptav.x<<"	"<<posptc.x<<"	"<<pospt.x<<"	"<<posptav.y<<"	"<<posptc.y<<"	"<<pospt.y<<"	"<<posptav.z<<"	"<<posptc.z<<"	"<<pospt.z<<"\n";
 				myfile <<estimatedc.at<float>(3)<<"	"<<estimatedc.at<float>(4)<<"	"<<estimatedc.at<float>(5)<<"\n";				
 			pub_point.publish(posptav);
+			pub_control.publish(twist_msg);
 			cv::waitKey(15);
 			ros::spinOnce();
 			
@@ -521,9 +550,18 @@ int main(int argc, char **argv)
 	//Feature Kalman Filter
 	//Transition Matrix A
 	cv::setIdentity(kf.transitionMatrix);
-	kf.transitionMatrix.at<float>(0,3)=dt;
-	kf.transitionMatrix.at<float>(1,4)=dt;
-	kf.transitionMatrix.at<float>(2,5)=dt;
+	kf.transitionMatrix = cv::Mat::zeros(stateSize, stateSize, type);
+	kf.transitionMatrix.at<float>(0,3)=40;
+	kf.transitionMatrix.at<float>(1,4)=25;
+	kf.transitionMatrix.at<float>(2,5)=20;
+	kf.transitionMatrix.at<float>(3,3)=-10;
+	kf.transitionMatrix.at<float>(4,4)=-10;
+	kf.transitionMatrix.at<float>(5,5)=-10;
+	//control matrix
+	kf.controlMatrix=cv::Mat::zeros(7,3,type);
+	kf.controlMatrix.at<float>(3,0)=6;
+	kf.controlMatrix.at<float>(4,1)=4.5;
+	kf.controlMatrix.at<float>(5,2)=100;
 	//Measurement Matrix H
 	kf.measurementMatrix = cv::Mat::zeros(measSize, stateSize, type);
 	kf.measurementMatrix.at<float>(0,0) = 1.0f;
@@ -587,6 +625,11 @@ int main(int argc, char **argv)
 	estimatedPastc.at<float>(3)=0.0;
 	estimatedPastc.at<float>(4)=0.0;
 	estimatedPastc.at<float>(5)=0.0;
+	//Reference
+	//Reference
+	Reference.at<float>(0)=0.0;
+	Reference.at<float>(1)=0.0;
+	Reference.at<float>(2)=1.0;
 	//Subscribing to ardrone camera node
 	image_transport::ImageTransport it(nh);
 	image_transport::Subscriber sub = it.subscribe("/ardrone/image_raw", 1, imageCallback);
