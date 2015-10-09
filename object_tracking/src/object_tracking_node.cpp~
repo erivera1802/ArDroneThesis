@@ -76,6 +76,7 @@ cv::Mat measc(measSize, 1, type);    // [z_x,z_y,z_z]
 cv::Mat cn(3,1,type);
 cv::Mat estimatedPast(stateSize,1,type);
 cv::Mat estimatedPastc(stateSize,1,type);
+cv::Mat Speed(3,1,type);
 int foundc=0;
 int foundf=0;
 //Simple Test Z
@@ -87,6 +88,7 @@ float estimatedvx;
 float estimatedvy;
 float estimatedvz;
 geometry_msgs::Point posptav;
+geometry_msgs::Point Speedav;
 float estimatedcx;
 float estimatedcy;
 float estimatedcz;
@@ -96,20 +98,60 @@ float estimatedcvz;
 cv::Mat EstimatedPose;
 cv::Mat State;
 cv::Mat Control(3,1,type);
+cv::Mat ControlSaturado(3,1,type);
 cv::Mat Reference(3,1,type);
-Mat PID(geometry_msgs::Point Pose,Mat reference)
+ros::Publisher pub_control;
+Mat sp(3,1,type);
+Mat spe(3,1,type);
+Mat Saturacion(Mat seal)
 {
-	float ex,ey,ez,dex,dey,dez;
-	float kx=1;
-	float ky=1;
-	float kz=1;
+	cv::Mat Sat(3,1,type);
+		
+	if(abs(seal.at<float>(0))>1.0)
+	{
+		Sat.at<float>(0)=seal.at<float>(0)/seal.at<float>(0);
+	}
+	else
+	{
+		Sat.at<float>(0)=seal.at<float>(0);
+	}
+	
+	if(abs(seal.at<float>(1))>1.0)
+	{
+		Sat.at<float>(1)=seal.at<float>(1)/seal.at<float>(1);
+	}
+	else
+	{
+		Sat.at<float>(1)=seal.at<float>(1);
+	}
+
+	if(abs(seal.at<float>(2))>1.0)
+	{
+		Sat.at<float>(2)=seal.at<float>(2)/seal.at<float>(2);
+	}
+	else
+	{
+		Sat.at<float>(2)=seal.at<float>(2);
+	}
+	return Sat;
+}
+Mat PID(geometry_msgs::Point Pose,geometry_msgs::Point vel,Mat reference)
+{
+	float ex,ey,ez,dex,dey,dez,expa,eypa,ezpa;
+	float kx=0.6;
+	float ky=0.6;
+	float kz=0.5;
+	float kvx=0.0;
+	float kvy=0.0;
+	float kvz=0.0;
+	int inicio=0;
 	Mat control(3,1,type);
 	ex=reference.at<float>(0)-Pose.x;
 	ey=reference.at<float>(1)-Pose.y;
-	ez=reference.at<float>(2)-Pose.z;
-	control.at<float>(0)=kx*ex;
-	control.at<float>(1)=ky*ey;
-	control.at<float>(2)=kz*ez;
+	ez=-reference.at<float>(2)+Pose.z;
+	control.at<float>(0)=kx*ex+kvx*(-vel.x);
+	control.at<float>(1)=ky*ey+kvy*(-vel.y);
+	control.at<float>(2)=kz*ez+kvy*(-vel.z);
 	return control;
 	
 
@@ -194,7 +236,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 		ros::NodeHandle neu;
 		ros::Publisher pub_empty_land;
 		ros::Publisher pub_point=neu.advertise<geometry_msgs::Point>("color_position",1);
-		ros::Publisher pub_control=neu.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
+		pub_control=neu.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
 		pub_empty_land = neu.advertise<std_msgs::Empty>("/ardrone/land", 1); /* Message queue length is just 1 */
 	
 		//Communicating between ROS an OpenCV
@@ -202,8 +244,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 		cv::Mat img_thr;
 		std::vector<Point3f> col_3D(4);   
 		std::vector<Point2f> color_keypoints(4);  
-		  try
-		  {
+
 				//Color Tracking Initialization
 				std::string image = ros::package::getPath("stream") + "/src/gbox.jpg";
 				cv_ptr=cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
@@ -249,25 +290,6 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 					}
 
 					//PnP color Stuff
-					/*solvePnP(Mat(col_3D),Mat(color_keypoints),Matrix,distortion,rvec_col,tvec_col,false,CV_ITERATIVE);
-
-					colorx=tvec_col.at<double>(0,0);
-					colory=tvec_col.at<double>(1,0);
-					colorz=tvec_col.at<double>(2,0);
-					
-					if(abs(tvec_col.at<double>(0,0))>1500)
-					{tvec_col.at<double>(0,0)=tvec_col.at<double>(0,0)/abs(tvec_col.at<double>(0,0));}
-					if(abs(tvec_col.at<double>(1,0))>1500)
-					{tvec_col.at<double>(1,0)=tvec_col.at<double>(1,0)/abs(tvec_col.at<double>(1,0));}
-					if(abs(tvec_col.at<double>(2,0))>1500)
-					{tvec_col.at<double>(2,0)=tvec_col.at<double>(2,0)/abs(tvec_col.at<double>(2,0));}
-					//Watch out big changes
-					if(abs(tvec_col.at<double>(0,0)-xpastc)>500)
-					{tvec_col.at<double>(0,0)=xpastc;}
-					if(abs(tvec_col.at<double>(1,0)-ypastc)>500)
-					{tvec_col.at<double>(1,0)=ypastc;}
-					if(abs(tvec_col.at<double>(2,0)-zpastc)>1)
-					{tvec_col.at<double>(2,0)=zpastc;}*/
 					tvec_col=PnPStuff(col_3D,color_keypoints,Matrix,distortion,rvec_col,tvec_col,xpastc,ypastc,zpastc);
 					
 					
@@ -299,7 +321,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 					measc.at<float>(1) = puntoc.y;
 					measc.at<float>(2) = puntoc.z;
 					foundc=0;
-					printf("holi");
+					printf("holi \n");
 					imshow("blob", gauss );
 				}
 				
@@ -356,8 +378,10 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 
 				}
 				geometry_msgs::Point pospt;
+				geometry_msgs::Point Speedf;
+				geometry_msgs::Point Speedc;
 				
-				if(good_matches.size()>9)
+				if(good_matches.size()>7)//9
 				{
 					Mat H = findHomography( obj, scene, CV_RANSAC );
 				
@@ -396,27 +420,12 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 					  line( img_matches, scene_corners[2] , scene_corners[3] , Scalar( 255, 255, 0), 4 );
 					  line( img_matches, scene_corners[3] , scene_corners[0] , Scalar( 0, 255, 0), 4);
 					circle( img_matches, scene_corners[4], 32.0, Scalar( 0, 0, 255 ), 4, 8 );
-					/*Test for simplier Z*/
+					//Test for simplier Z
 					zar=scene_corners[0].x-scene_corners[1].x;
 					zab=scene_corners[2].x-scene_corners[3].x;
 					zprom=abs(zar+zab)/2.0;
 					//PNP stuff
-					/*solvePnP(Mat(obj_3D),Mat(scene_corners),Matrix,distortion,rvec,tvec,false,CV_ITERATIVE);
-					//Watch out big values
-					if(abs(tvec.at<double>(0,0))>1500)
-					{tvec.at<double>(0,0)=tvec.at<double>(0,0)/abs(tvec.at<double>(0,0));}
-					if(abs(tvec.at<double>(1,0))>1500)
-					{tvec.at<double>(1,0)=tvec.at<double>(1,0)/abs(tvec.at<double>(1,0));}
-					if(abs(tvec.at<double>(2,0))>1500)
-					{tvec.at<double>(2,0)=tvec.at<double>(2,0)/abs(tvec.at<double>(2,0));}
-					//Watch out big changes
-					if(abs(tvec.at<double>(0,0)-xpast)>500)
-					{tvec.at<double>(0,0)=xpast;}
-					if(abs(tvec.at<double>(1,0)-ypast)>500)
-					{tvec.at<double>(1,0)=ypast;}
-					if(abs(tvec.at<double>(2,0)-zpast)>500)
-					{tvec.at<double>(2,0)=zpast;}
-					*/
+	
 					tvec=PnPStuff(obj_3D,scene_corners,Matrix,distortion,rvec,tvec,xpast,ypast,zpast);
 					
 
@@ -438,6 +447,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 					ypast=tvec.at<double>(1,0);
 					zpast=tvec.at<double>(2,0);
 					foundf=1;
+					
 				}
 				else
 				{
@@ -448,7 +458,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 					meas.at<float>(1) = punto.y;
 					meas.at<float>(2) = punto.z;
 					foundf=0;
-					printf("hole");
+					printf("hole \n");
 					
 				}
 
@@ -460,42 +470,68 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 				//Kalman Prediction and Correction	
 				estimatedc=Kalman(meas,kfc);
 				estimated=Kalman(meas,kf);
+				
 				//Check for Nan
 				estimated=NaNCheck(estimated,estimatedPast);
 				estimatedc=NaNCheck(estimatedc,estimatedPastc);
-		
+				
 
 				//Save Kalman for ROS message				
 				pospt.x=estimated.at<float>(0);
 				pospt.y=estimated.at<float>(1);
 				pospt.z=estimated.at<float>(2);
+				Speedf.x=estimated.at<float>(3);
+				Speedf.y=estimated.at<float>(4);
+				Speedf.z=estimated.at<float>(5);
 
 				posptc.x=estimatedc.at<float>(0);
 				posptc.y=estimatedc.at<float>(1);
 				posptc.z=estimatedc.at<float>(2);
+				Speedc.x=estimatedc.at<float>(3);
+				Speedc.y=estimatedc.at<float>(4);
+				Speedc.z=estimatedc.at<float>(5);
+				
 
-				/*posptav.x=(pospt.x+posptc.x)/2;
-				posptav.y=(pospt.y+posptc.y)/2;
-				posptav.z=(pospt.z+posptc.z)/2;*/
 				posptav=Selection(pospt,posptc,foundf,foundc);
-				Control=PID(posptav,Reference);
-				twist_msg.linear.x=Control.at<float>(2);
-				twist_msg.linear.y=Control.at<float>(0);
-				twist_msg.linear.z=Control.at<float>(1);
-				printf("[%f	%f	%f] \n",Control.at<float>(0),Control.at<float>(1),Control.at<float>(2));
+				Speedav=Selection(Speedf,Speedc,foundf,foundc);
+				
+				Control=PID(posptav,Speedav,Reference);
+				ControlSaturado=Saturacion(Control);
+				if(foundf||foundc)
+				{
+				twist_msg.linear.x=ControlSaturado.at<float>(2);
+				twist_msg.linear.y=ControlSaturado.at<float>(0);
+				twist_msg.linear.z=0.0;	
+				}
+				else
+				{
+				twist_msg.linear.x=0.0;
+				twist_msg.linear.y=0.0;
+				twist_msg.linear.z=0.0;
+				}
+				printf("[%f	%f	%f] \n",twist_msg.linear.x,twist_msg.linear.y,twist_msg.linear.z);
+				/*twist_msg.linear.x=ControlSaturado.at<float>(2);
+				twist_msg.linear.y=ControlSaturado.at<float>(0);
+				twist_msg.linear.z=ControlSaturado.at<float>(1);
+				sp.at<float>(0)=Speedav.x;
+				sp.at<float>(1)=Speedav.y;
+				sp.at<float>(2)=Speedav.z;
+				spe=Saturacion(sp);
+				twist_msg.linear.x=spe.at<float>(0);	
+				twist_msg.linear.y=spe.at<float>(1);
+				twist_msg.linear.z=spe.at<float>(2);*/
+
+			
+				//printf("[%f	%f	%f] \n",pospt.x,pospt.y,posptav.z);
 				//myfile <<posptav.x<<"	"<<posptc.x<<"	"<<pospt.x<<"	"<<posptav.y<<"	"<<posptc.y<<"	"<<pospt.y<<"	"<<posptav.z<<"	"<<posptc.z<<"	"<<pospt.z<<"\n";
-				myfile <<estimatedc.at<float>(3)<<"	"<<estimatedc.at<float>(4)<<"	"<<estimatedc.at<float>(5)<<"\n";				
-			pub_point.publish(posptav);
+				//myfile <<estimatedc.at<float>(3)<<"	"<<estimatedc.at<float>(4)<<"	"<<estimatedc.at<float>(5)<<"\n";				
+			//pub_point.publish(posptav);
 			pub_control.publish(twist_msg);
 			cv::waitKey(15);
 			ros::spinOnce();
+			//loop_rate.sleep();
 			
-		  }
 
-		  catch (cv_bridge::Exception& e)
-		  {
-		    ROS_ERROR("Could not convert from '%s' to 'bgr8'.", msg->encoding.c_str());
-		  }
 	
 	
 	}
@@ -545,18 +581,21 @@ int main(int argc, char **argv)
 	distortion[4]=0;
 
 
-	float dt=0.0647;//Dont know it yet
+	float dt=0.07;//Dont know it yet
 
 	//Feature Kalman Filter
 	//Transition Matrix A
-	cv::setIdentity(kf.transitionMatrix);
 	kf.transitionMatrix = cv::Mat::zeros(stateSize, stateSize, type);
-	kf.transitionMatrix.at<float>(0,3)=40;
-	kf.transitionMatrix.at<float>(1,4)=25;
-	kf.transitionMatrix.at<float>(2,5)=20;
-	kf.transitionMatrix.at<float>(3,3)=-10;
-	kf.transitionMatrix.at<float>(4,4)=-10;
-	kf.transitionMatrix.at<float>(5,5)=-10;
+	cv::setIdentity(kf.transitionMatrix);
+	/*kfc.transitionMatrix.at<float>(0,3)=40;
+	kfc.transitionMatrix.at<float>(1,4)=25;
+	kfc.transitionMatrix.at<float>(2,5)=20;
+	kfc.transitionMatrix.at<float>(3,3)=-10;
+	kfc.transitionMatrix.at<float>(4,4)=-10;
+	kfc.transitionMatrix.at<float>(5,5)=-10;*/
+	kf.transitionMatrix.at<float>(0,3)=dt;
+	kf.transitionMatrix.at<float>(1,4)=dt;
+	kf.transitionMatrix.at<float>(2,5)=dt;
 	//control matrix
 	kf.controlMatrix=cv::Mat::zeros(7,3,type);
 	kf.controlMatrix.at<float>(3,0)=6;
@@ -571,9 +610,9 @@ int main(int argc, char **argv)
 	kf.processNoiseCov.at<float>(0,0) = 1e-5;
 	kf.processNoiseCov.at<float>(1,1) = 1e-5;
 	kf.processNoiseCov.at<float>(2,2) = 1e-5;
-	kf.processNoiseCov.at<float>(3,3) = 1e-5;
-	kf.processNoiseCov.at<float>(4,4) = 1e-5;
-	kf.processNoiseCov.at<float>(5,5) = 1e-5;
+	kf.processNoiseCov.at<float>(3,3) = 1e-4;
+	kf.processNoiseCov.at<float>(4,4) = 1e-4;
+	kf.processNoiseCov.at<float>(5,5) = 1e-4;
 	kf.measurementNoiseCov.at<float>(0,0) = 1e-3;
 	kf.measurementNoiseCov.at<float>(1,1) = 1e-3;
 	kf.measurementNoiseCov.at<float>(2,2) = 1e-1;
@@ -583,12 +622,16 @@ int main(int argc, char **argv)
 	//Color Kalman Filter
 	//Transition Matrix A
 	kfc.transitionMatrix = cv::Mat::zeros(stateSize, stateSize, type);
-	kfc.transitionMatrix.at<float>(0,3)=40;
+	cv::setIdentity(kfc.transitionMatrix);
+	/*kfc.transitionMatrix.at<float>(0,3)=40;
 	kfc.transitionMatrix.at<float>(1,4)=25;
 	kfc.transitionMatrix.at<float>(2,5)=20;
 	kfc.transitionMatrix.at<float>(3,3)=-10;
 	kfc.transitionMatrix.at<float>(4,4)=-10;
-	kfc.transitionMatrix.at<float>(5,5)=-10;
+	kfc.transitionMatrix.at<float>(5,5)=-10;*/
+	kfc.transitionMatrix.at<float>(0,3)=dt;
+	kfc.transitionMatrix.at<float>(1,4)=dt;
+	kfc.transitionMatrix.at<float>(2,5)=dt;
 	//control matrix
 	kfc.controlMatrix=cv::Mat::zeros(7,3,type);
 	kfc.controlMatrix.at<float>(3,0)=6;
@@ -629,7 +672,8 @@ int main(int argc, char **argv)
 	//Reference
 	Reference.at<float>(0)=0.0;
 	Reference.at<float>(1)=0.0;
-	Reference.at<float>(2)=1.0;
+	Reference.at<float>(2)=0.9;
+	//Remember to delete!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	//Subscribing to ardrone camera node
 	image_transport::ImageTransport it(nh);
 	image_transport::Subscriber sub = it.subscribe("/ardrone/image_raw", 1, imageCallback);
