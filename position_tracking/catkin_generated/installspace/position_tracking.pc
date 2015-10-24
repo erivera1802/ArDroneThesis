@@ -1,0 +1,8 @@
+prefix=/home/edrone/catkin_ws/install
+
+Name: position_tracking
+Description: Description of position_tracking
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/edrone/catkin_ws/install/lib 
+Requires: 

@@ -1,0 +1,7 @@
+set(_CATKIN_CURRENT_PACKAGE "position_tracking")
+set(position_tracking_MAINTAINER "edrone <edrone@todo.todo>")
+set(position_tracking_DEPRECATED "")
+set(position_tracking_VERSION "0.0.0")
+set(position_tracking_BUILD_DEPENDS "ardrone_autonomy" "cv_bridge" "geometry_msgs" "image_transport" "roscpp" "sensor_msgs" "std_msgs" "tf")
+set(position_tracking_RUN_DEPENDS "ardrone_autonomy" "cv_bridge" "geometry_msgs" "image_transport" "roscpp" "sensor_msgs" "std_msgs" "tf")
+set(position_tracking_BUILDTOOL_DEPENDS "catkin")
