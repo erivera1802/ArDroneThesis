@@ -1,0 +1,7 @@
+set(_CATKIN_CURRENT_PACKAGE "kontrol")
+set(kontrol_MAINTAINER "edrone <edrone@todo.todo>")
+set(kontrol_DEPRECATED "")
+set(kontrol_VERSION "0.0.0")
+set(kontrol_BUILD_DEPENDS "ardrone_autonomy" "cv_bridge" "geometry_msgs" "image_transport" "roscpp" "sensor_msgs" "std_msgs" "tf")
+set(kontrol_RUN_DEPENDS "ardrone_autonomy" "cv_bridge" "geometry_msgs" "image_transport" "roscpp" "sensor_msgs" "std_msgs" "tf")
+set(kontrol_BUILDTOOL_DEPENDS "catkin")
