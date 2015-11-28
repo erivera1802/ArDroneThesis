@@ -36,12 +36,12 @@ float ey,ez,ex;
 float refz;
 float xpast=0,ypast=0,zpast=0,xpastc=0,ypastc=0,zpastc=0;
 //Values for Trackbar, Hue, Saturation Value
-int iLowH=158;
-int iHighH=179;
-int iLowS=100;
-int iHighS=255;
-int iLowV=64;
-int iHighV=255;
+int iLowH=144;
+int iHighH=5;
+int iLowS=123;
+int iHighS=185;
+int iLowV=124;
+int iHighV=194;
 //Message initialization
 geometry_msgs::Point point_msg;
 std_msgs::Empty emp_msg;
@@ -110,6 +110,7 @@ cv::Mat ControlSaturado(3,1,type);
 cv::Mat Reference(3,1,type);
 ros::Publisher pub_control;
 ros::Publisher pub_point;
+ros::Publisher pub_vel;
 Mat sp(3,1,type);
 Mat spe(3,1,type);
 double start_time;
@@ -191,23 +192,23 @@ geometry_msgs::Point Selection(geometry_msgs::Point Fea,geometry_msgs::Point Col
 	
 	if(F && C)
 	{
-		/*Preturn.x=(Fea.x+Col.x)/2.0;
-		Preturn.y=(2*Fea.y+Col.y)/3.0;
-		Preturn.z=(2*Fea.z+Col.z)/3.0;*/
-		 Preturn.x=(Col.x);
+		Preturn.x=(Fea.x+Col.x);
+		Preturn.y=(Fea.y+Col.y);
+		Preturn.z=(Fea.z+Col.z);
+		 /*Preturn.x=(Col.x);
 		Preturn.y=(Col.y);
-		Preturn.z=(Col.z);
+		Preturn.z=(Col.z);*/
 		foundtotal=1;
 		lost=0;		
 	}
 	else if (F==1 && C==0)
 	{
-		/*Preturn.x=Fea.x;
+		Preturn.x=Fea.x;
 		Preturn.y=Fea.y;
-		Preturn.z=Fea.z;*/
-		Preturn.x=0.0;
+		Preturn.z=Fea.z;
+		/*Preturn.x=0.0;
 		Preturn.y=0.0;
-		Preturn.z=0.0;
+		Preturn.z=0.0;*/
 		foundtotal=1;
 		lost=0;	
 	}
@@ -220,19 +221,10 @@ geometry_msgs::Point Selection(geometry_msgs::Point Fea,geometry_msgs::Point Col
 		lost=0;	
 	}
 	else if(F==0 && C==0)
-	{if(pov==1)
 	{
-		if(lost<50)
-		{
-		Preturn.x=Reference.at<float>(0);
-		Preturn.y=Reference.at<float>(1);
-		Preturn.z=Reference.at<float>(2);
-		lost=lost+1;
-		}
-		else
-		{foundtotal=0;
-		}
-		}
+		Preturn.x=-10;
+		Preturn.y=-10;
+		Preturn.z=-10;
 
 		
 			
@@ -277,6 +269,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 		ros::NodeHandle neu;
 		ros::Publisher pub_empty_land;
 		pub_point=neu.advertise<geometry_msgs::PointStamped>("color_position",1);
+		pub_vel=neu.advertise<geometry_msgs::PointStamped>("color_velocity",1);
 		pub_control=neu.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
 		pub_empty_land = neu.advertise<std_msgs::Empty>("/ardrone/land", 1); /* Message queue length is just 1 */
 	
@@ -287,11 +280,13 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 		std::vector<Point2f> color_keypoints(4);  
 
 				//Color Tracking Initialization
-				std::string image = ros::package::getPath("stream") + "/src/dr.jpg";
+				std::string image = ros::package::getPath("stream") + "/src/gbox.jpg";
 				cv_ptr=cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
 				cv::Mat img2;
 				cv::Mat color;
 				cv::Mat gauss;
+				cv::Mat gauss1;
+				cv::Mat gauss2;
 				cv::Mat blobs;
 				color=cv_ptr->image;
 				cv::GaussianBlur( cv_ptr->image, gauss, Size( 3, 3 ), 0, 0 );
@@ -302,13 +297,26 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 				cvCreateTrackbar("HighS", "blob", &iHighS, 255); 
 				cvCreateTrackbar("LowV", "blob", &iLowV, 255); 
 				cvCreateTrackbar("HighV", "blob", &iHighV, 255);
-				cv::inRange(gauss, cv::Scalar(iLowH,iLowS,iLowV), cv::Scalar(iHighH,iHighS,iHighV), gauss); 
+				if(iLowH<iHighH)
+				{
+				cv::inRange(gauss, cv::Scalar(iLowH,iLowS,iLowV), cv::Scalar(iHighH,iHighS,iHighV), gauss);
+				}
+				else
+				{
+				cv::inRange(gauss, cv::Scalar(iLowH,iLowS,iLowV), cv::Scalar(179,iHighS,iHighV), gauss1);
+				cv::inRange(gauss, cv::Scalar(0,iLowS,iLowV), cv::Scalar(iHighH,iHighS,iHighV), gauss2);
+				gauss=gauss1+gauss2;
+				} 
 				imshow("Color", color);
 				//Color reference
-				col_3D[0] = Point3f(-0.115,-0.08,0); 
+				/*col_3D[0] = Point3f(-0.115,-0.08,0); 
 				col_3D[1] = Point3f(0.115,-0.08,0);
 				col_3D[2] = Point3f(-0.24,0.245,0); 
-				col_3D[3] = Point3f(0.24,0.245,0);
+				col_3D[3] = Point3f(0.24,0.245,0);*/
+				col_3D[0] = Point3f(-0.051,-0.065,0); 
+				col_3D[1] = Point3f(0.051,-0.065,0);
+				col_3D[2] = Point3f(-0.096,0.098,0); 
+				col_3D[3] = Point3f(0.096,0.098,0);
 				//Thresholding
 				cv::cvtColor(cv_ptr->image,img2,CV_BGR2GRAY);
 				Mat img1 = imread(image, CV_LOAD_IMAGE_GRAYSCALE );
@@ -351,6 +359,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 					measc.at<float>(2) = puntoc.z;
 
 					foundc=1;
+					printf("%f	%f	%f \n",measc.at<float>(0),measc.at<float>(1),measc.at<float>(2));
 
 				}
 				else
@@ -365,13 +374,15 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 					//printf("holi \n");
 					imshow("blob", gauss );
 				}
-				
+				geometry_msgs::Point pospt;
+				geometry_msgs::Point Speedf;
+				geometry_msgs::PointStamped Speedc;
 				//Detector, and extractor initializing
 				//Detector, and extractor initializing
 				//IMPORTAAAAAAAAAANT, REMEMBER TO CHECK SURF AND SIFT, 'CAUSE SCALE INVARIANCE PROBLEM :-(
 				//UUUUSMJSJIASLJADSJLDAJILDAJILDAJILDALJ?????¡!!!!!!!!!!!!!!!!!
 				//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-				OrbFeatureDetector detector;
+/*				OrbFeatureDetector detector;
 			    	vector<KeyPoint> keypoints1, keypoints2,objk,scenek;
 				detector.detect(img1, keypoints1);
 				    // computing descriptors
@@ -418,9 +429,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 					objk.push_back( keypoints1[ good_matches[i].trainIdx ] );
 
 				}
-				geometry_msgs::Point pospt;
-				geometry_msgs::Point Speedf;
-				geometry_msgs::Point Speedc;
+				
 				
 				if(good_matches.size()>7)//9
 				{
@@ -504,44 +513,62 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 				}
 
 				
-
+*/
 
 				
 
 				//Kalman Prediction and Correction	
-				estimatedc=Kalman(meas,kfc);
-				estimated=Kalman(meas,kf);
+				estimatedc=Kalman(measc,kfc);
+				//estimated=Kalman(meas,kf);
 				
 				//Check for Nan
-				estimated=NaNCheck(estimated,estimatedPast);
+				//estimated=NaNCheck(estimated,estimatedPast);
 				estimatedc=NaNCheck(estimatedc,estimatedPastc);
 				
 
 				//Save Kalman for ROS message				
-				pospt.x=estimated.at<float>(0);
+				/*pospt.x=estimated.at<float>(0);
 				pospt.y=estimated.at<float>(1);
 				pospt.z=estimated.at<float>(2);
 				Speedf.x=estimated.at<float>(3);
 				Speedf.y=estimated.at<float>(4);
-				Speedf.z=estimated.at<float>(5);
+				Speedf.z=estimated.at<float>(5);*/
 
 				posptc.x=estimatedc.at<float>(0);
 				posptc.y=estimatedc.at<float>(1);
 				posptc.z=estimatedc.at<float>(2);
-				Speedc.x=estimatedc.at<float>(3);
-				Speedc.y=estimatedc.at<float>(4);
-				Speedc.z=estimatedc.at<float>(5);
 
-				posptavs.point.x=estimatedc.at<float>(0);
+				if(foundc==1)
+				{
+				Speedc.point.x=estimatedc.at<float>(3);
+				Speedc.point.y=estimatedc.at<float>(4);
+				Speedc.point.z=estimatedc.at<float>(5);
+				Speedc.header.stamp=ros::Time::now();
+
+				posptavs.point.x=puntoc.x;
 				posptavs.point.y=estimatedc.at<float>(1);
 				posptavs.point.z=estimatedc.at<float>(2);
 				posptavs.header.stamp=ros::Time::now();
+				}
+				else if(foundc==0)
+				{
+				Speedc.point.x=-10;
+				Speedc.point.y=-10;
+				Speedc.point.z=-10;
+				Speedc.header.stamp=ros::Time::now();
 
-				posptav=Selection(pospt,posptc,foundf,foundc,kf,kfc,1);
-				Speedav=Selection(Speedf,Speedc,foundf,foundc,kf,kfc,0);
-				
-				Control=PID(punto,Speedav,Reference);
-				ControlSaturado=Saturacion(Control);
+				posptavs.point.x=-10;
+				posptavs.point.y=-10;
+				posptavs.point.z=-10;
+				posptavs.header.stamp=ros::Time::now();	
+				}
+				//printf("[%f	%f	%f] \n",posptavs.point.x,posptavs.point.y,posptavs.point.z);
+
+/*				posptav=Selection(pospt,posptc,foundf,foundc,kf,kfc,1);
+				//Speedav=Selection(Speedf,Speedc,foundf,foundc,kf,kfc,0);
+			
+				//Control=PID(punto,Speedav,Reference);
+				//ControlSaturado=Saturacion(Control);
 				if(foundtotal==1)
 				{
 				twist_msg.linear.x=ControlSaturado.at<float>(2);
@@ -556,13 +583,13 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 				twist_msg.linear.y=0.0;
 				twist_msg.linear.z=0.0;
 				}
-				//printf("[%f	%f	%f] \n",posptav.x,posptav.y,posptav.z);
+				
 				printf("[%f	%f	%f] \n",twist_msg.linear.x,twist_msg.linear.y,twist_msg.linear.z);
-				/*twist_msg.linear.y=0.1*sin((double)ros::Time::now().toSec());
+				twist_msg.linear.y=0.1*sin((double)ros::Time::now().toSec());
 				twist_msg.linear.x=0.0;
-				twist_msg.linear.z=0.0;*/
+				twist_msg.linear.z=0.0;
 				//printf("%d	%d \n",foundtotal,lost);
-				/*twist_msg.linear.x=ControlSaturado.at<float>(2);
+				twist_msg.linear.x=ControlSaturado.at<float>(2);
 				twist_msg.linear.y=ControlSaturado.at<float>(0);
 				twist_msg.linear.z=ControlSaturado.at<float>(1);
 				sp.at<float>(0)=Speedav.x;
@@ -575,11 +602,12 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 
 			
 				//printf("[%f	%f	%f] \n",pospt.x,pospt.y,posptav.z);
-				myfile <<posptav.x<<"	"<<posptc.x<<"	"<<pospt.x<<"	"<<posptav.y<<"	"<<posptc.y<<"	"<<pospt.y<<"	"<<posptav.z<<"	"<<posptc.z<<"	"<<pospt.z<<"	"<<twist_msg.linear.y<<"\n";
+				//myfile <<posptav.x<<"	"<<posptc.x<<"	"<<pospt.x<<"	"<<posptav.y<<"	"<<posptc.y<<"	"<<pospt.y<<"	"<<posptav.z<<"	"<<posptc.z<<"	"<<pospt.z<<"	"<<twist_msg.linear.y<<"\n";
 				//myfile <<estimatedc.at<float>(3)<<"	"<<estimatedc.at<float>(4)<<"	"<<estimatedc.at<float>(5)<<"\n";				
 			pub_point.publish(posptavs);
+			pub_vel.publish(Speedc);
 			//pub_control.publish(twist_msg);
-			loop_rate.sleep();
+			//loop_rate.sleep();
 			
 
 	
@@ -601,7 +629,7 @@ int main(int argc, char **argv)
         params.maxThreshold = 60;
         params.thresholdStep = 5;
 	params.minCircularity=0.5;
-        params.minArea = 100;
+        params.minArea = 30;
         params.minConvexity = 0.3;
         params.minInertiaRatio = 0.01;
 	
