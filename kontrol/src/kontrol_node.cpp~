@@ -174,23 +174,23 @@ cv::Mat PID(cv::Mat estimate,cv::Mat referencia)
 	eypa=ey;
 	return control;
 }
-float Kplace(float Px,float Velx,float delay)
+float Kplace(float Px,float Velx,float delay,float rf)
 {
 	/*float K1=0.8719;
 	float K2=0.3190;
 	float K3=1.7452;*/
-	float K1=4.0038;
-	float K2=1.2807;
-	float K3=6.3071;
-	float N=4.0096
-	float Uc=15-K1*Px-K2*Velx-K3*delay;
+	float K1=4.16;
+	float K2=1.469;
+	float K3=7.836;
+	float N=4.15;
+	float Uc=rf*N-K1*Px-K2*Velx-K3*delay;
 	return Uc;
 	
 }
 
 void callback(const geometry_msgs::PointStamped::ConstPtr& p1, const geometry_msgs::PointStamped::ConstPtr& p2,const geometry_msgs::PointStamped::ConstPtr& v1,const geometry_msgs::PointStamped::ConstPtr& v2)
 {
-	ofstream myfile("/home/edrone/KpObj.txt",ios_base::app);
+	ofstream myfile("/home/edrone/KpCam.txt",ios_base::app);
   ros::NodeHandle neu;
 	ros::Rate loop_rate(50);
 	geometry_msgs::PointStamped posim=*p1;
@@ -260,17 +260,18 @@ void callback(const geometry_msgs::PointStamped::ConstPtr& p1, const geometry_ms
 
 			
 			kontrol=PID(estado,reference);
-			Uy=Kplace(estimated.at<float>(0),estimated.at<float>(1),estimated.at<float>(2));	
+			Uy=Kplace(estado.at<float>(1),estimated.at<float>(1),estimated.at<float>(2),reference.at<float>(1));	
 			twist_msg.linear.y=Uy.at<float>(0);
 			twist_msg.linear.x=kontrol.at<float>(0);
 			/*twist_msg.linear.y=estimated.at<float>(0);
 			twist_msg.linear.x=estimated.at<float>(1);*/
-
-			if(abs(PosX)>2 || abs(PosY)>2)
+			if(abs(Uy.at<float>(0))>1)
+			{Uy.at<float>(0)=Uy.at<float>(0)/abs(Uy.at<float>(0));}
+			if(abs(PosX)>3 || abs(PosY)>3)
 			{pub_empty_land.publish(emp_msg);
 			ROS_INFO("Landing");}
 			//ROS_INFO("Doin' something");
-			printf("%f	%f \n",estimated.at<float>(0),estimated.at<float>(1));
+			printf("%f	%f	%f\n",estado.at<float>(1),reference.at<float>(1),Uy.at<float>(0));
 			/*if(tiempo<5+takeoff_time && tiempo>3+takeoff_time)
 			{
 				twist_msg.linear.x=0.3;
@@ -288,9 +289,8 @@ void callback(const geometry_msgs::PointStamped::ConstPtr& p1, const geometry_ms
 			//printf("%f	%f \n",reference.at<float>(0),twist_msg.linear.x);
 			ey=reference.at<float>(1)-estado.at<float>(1);
 			ex=reference.at<float>(0)-estado.at<float>(0);
-			myfile <<estado.at<float>(1)<<"	"<<estado.at<float>(4)<<"	"<<estimated.at<float>(0)<<"	"<<estimated.at<float>(1)<<"	"<<estimated.at<float>(2)<<"	"<<tiempo<<"\n";
-			//myfile << twist_msg.linear.y<<"	"<<estado.at<float>(1)<<"	"<<reference.at<float>(1)<<"	"<<ey<<"	"<<tiempo<<"\n";
-			//myfile << twist_msg.linear.x<<"	"<<estado.at<float>(3)<<"	"<<tiempo<<"\n";
+			//myfile <<estado.at<float>(1)<<"	"<<estado.at<float>(4)<<"	"<<estimated.at<float>(0)<<"	"<<estimated.at<float>(1)<<"	"<<estimated.at<float>(2)<<"	"<<tiempo<<"\n";
+			myfile <<estado.at<float>(1)<<"	"<<estado.at<float>(4)<<"	"<<reference.at<float>(1)<<"	"<<estimated.at<float>(0)<<"	"<<estimated.at<float>(1)<<"	"<<estimated.at<float>(2)<<"	"<<Uy.at<float>(0)<<"	"<<tiempo<<"\n";
 			
 		}
 	//myfile << resta<<"\n";
@@ -325,13 +325,23 @@ int main(int argc, char **argv)
 	float dt=0.0647;//Dont know it yet
 //Transition Matrix A
 	cv::setIdentity(kf.transitionMatrix);
-	kf.transitionMatrix.at<float>(1,1)=0.9489;
+	/*kf.transitionMatrix.at<float>(1,1)=0.9489;
 	kf.transitionMatrix.at<float>(2,1)=0.0;
 	kf.transitionMatrix.at<float>(1,2)=1.1965;
 	kf.transitionMatrix.at<float>(2,2)=0.7988;
 	kf.transitionMatrix.at<float>(0,0)=1;
 	kf.transitionMatrix.at<float>(0,1)=0.03285;
 	kf.transitionMatrix.at<float>(0,2)=0.02107;
+	*/
+	kf.transitionMatrix.at<float>(0,0)=1;
+	kf.transitionMatrix.at<float>(0,1)=0.0725;
+	kf.transitionMatrix.at<float>(0,2)=0.1143;
+	kf.transitionMatrix.at<float>(1,0)=0;
+	kf.transitionMatrix.at<float>(1,1)=0.8873;
+	kf.transitionMatrix.at<float>(1,2)=2.6748;
+	kf.transitionMatrix.at<float>(2,0)=0;
+	kf.transitionMatrix.at<float>(2,1)=0;
+	kf.transitionMatrix.at<float>(2,2)=0.5988;
 	
 	/*kf.transitionMatrix.at<float>(0,0)=1;
 	kf.transitionMatrix.at<float>(1,0)=dt;
@@ -340,9 +350,12 @@ int main(int argc, char **argv)
 
 	//Control Matrix B
 	kf.controlMatrix = cv::Mat::zeros(stateSize, contrSize, type);
-	kf.controlMatrix.at<float>(0)=-0.005;	
+	/*kf.controlMatrix.at<float>(0)=-0.005;	
 	kf.controlMatrix.at<float>(1)=-0.3166;
-	kf.controlMatrix.at<float>(2)=0.1206;
+	kf.controlMatrix.at<float>(2)=0.1206;*/
+	kf.controlMatrix.at<float>(0)=-0.0281;	
+	kf.controlMatrix.at<float>(1)=-0.5739;
+	kf.controlMatrix.at<float>(2)=0.2407;
 	/*kf.controlMatrix.at<float>(0,0)=0;
 	kf.controlMatrix.at<float>(1,0)=0;*/
 	//Measurement Matrix H
@@ -361,7 +374,7 @@ int main(int argc, char **argv)
 	Uy.at<float>(0)=0.0;
 	start_time =ros::Time::now().toSec();
 	takeoff_time=5.0;
-	fly_time=10;
+	fly_time=20;
 	land_time=3.0;
 	kill_time =2.0;
 
