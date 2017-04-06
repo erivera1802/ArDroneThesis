@@ -192,39 +192,28 @@ geometry_msgs::Point Selection(geometry_msgs::Point Fea,geometry_msgs::Point Col
 	
 	if(F && C)
 	{
-		Preturn.x=(Fea.x+Col.x);
-		Preturn.y=(Fea.y+Col.y);
-		Preturn.z=(Fea.z+Col.z);
-		 /*Preturn.x=(Col.x);
-		Preturn.y=(Col.y);
-		Preturn.z=(Col.z);*/
-		foundtotal=1;
-		lost=0;		
+		Preturn.x=(Fea.x);
+		Preturn.y=(Fea.y);
+		Preturn.z=(Fea.z);	
 	}
 	else if (F==1 && C==0)
 	{
 		Preturn.x=Fea.x;
 		Preturn.y=Fea.y;
 		Preturn.z=Fea.z;
-		/*Preturn.x=0.0;
-		Preturn.y=0.0;
-		Preturn.z=0.0;*/
-		foundtotal=1;
-		lost=0;	
+	
 	}
 	else if (F==0 && C==1)
 	{
 		Preturn.x=Col.x;
 		Preturn.y=Col.y;
 		Preturn.z=Col.z;
-		foundtotal=1;
-		lost=0;	
 	}
 	else if(F==0 && C==0)
 	{
-		Preturn.x=-10;
-		Preturn.y=-10;
-		Preturn.z=-10;
+		Preturn.x=-0.314;
+		Preturn.y=-0.314;
+		Preturn.z=-0.314;
 
 		
 			
@@ -359,7 +348,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 					measc.at<float>(2) = puntoc.z;
 
 					foundc=1;
-					printf("%f	%f	%f \n",measc.at<float>(0),measc.at<float>(1),measc.at<float>(2));
+					
 
 				}
 				else
@@ -382,7 +371,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 				//IMPORTAAAAAAAAAANT, REMEMBER TO CHECK SURF AND SIFT, 'CAUSE SCALE INVARIANCE PROBLEM :-(
 				//UUUUSMJSJIASLJADSJLDAJILDAJILDAJILDALJ?????¡!!!!!!!!!!!!!!!!!
 				//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-/*				OrbFeatureDetector detector;
+				OrbFeatureDetector detector;
 			    	vector<KeyPoint> keypoints1, keypoints2,objk,scenek;
 				detector.detect(img1, keypoints1);
 				    // computing descriptors
@@ -431,7 +420,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 				}
 				
 				
-				if(good_matches.size()>7)//9
+				if(good_matches.size()>9)//9
 				{
 					Mat H = findHomography( obj, scene, CV_RANSAC );
 				
@@ -513,97 +502,86 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 				}
 
 				
-*/
+
 
 				
 
 				//Kalman Prediction and Correction	
 				estimatedc=Kalman(measc,kfc);
-				//estimated=Kalman(meas,kf);
+				estimated=Kalman(meas,kf);
 				
 				//Check for Nan
-				//estimated=NaNCheck(estimated,estimatedPast);
+				estimated=NaNCheck(estimated,estimatedPast);
 				estimatedc=NaNCheck(estimatedc,estimatedPastc);
 				
 
 				//Save Kalman for ROS message				
-				/*pospt.x=estimated.at<float>(0);
+				pospt.x=estimated.at<float>(0);
 				pospt.y=estimated.at<float>(1);
 				pospt.z=estimated.at<float>(2);
 				Speedf.x=estimated.at<float>(3);
 				Speedf.y=estimated.at<float>(4);
-				Speedf.z=estimated.at<float>(5);*/
+				Speedf.z=estimated.at<float>(5);
 
 				posptc.x=estimatedc.at<float>(0);
 				posptc.y=estimatedc.at<float>(1);
 				posptc.z=estimatedc.at<float>(2);
+				Speedc.point.x=estimated.at<float>(3);
+				Speedc.point.y=estimated.at<float>(4);
+				Speedc.point.z=estimated.at<float>(5);
+				Speedc.header.stamp=ros::Time::now();
 
-				if(foundc==1)
+				/*if(foundc==1)
 				{
 				Speedc.point.x=estimatedc.at<float>(3);
 				Speedc.point.y=estimatedc.at<float>(4);
 				Speedc.point.z=estimatedc.at<float>(5);
 				Speedc.header.stamp=ros::Time::now();
+				
 
-				posptavs.point.x=puntoc.x;
+
+				posptavs.point.x=estimatedc.at<float>(0);
 				posptavs.point.y=estimatedc.at<float>(1);
 				posptavs.point.z=estimatedc.at<float>(2);
 				posptavs.header.stamp=ros::Time::now();
 				}
 				else if(foundc==0)
 				{
-				Speedc.point.x=-10;
-				Speedc.point.y=-10;
-				Speedc.point.z=-10;
+				Speedc.point.x=-0;
+				Speedc.point.y=-0;
+				Speedc.point.z=-0;
 				Speedc.header.stamp=ros::Time::now();
 
-				posptavs.point.x=-10;
-				posptavs.point.y=-10;
-				posptavs.point.z=-10;
+				posptavs.point.x=-0;
+				posptavs.point.y=-0;
+				posptavs.point.z=-0;
 				posptavs.header.stamp=ros::Time::now();	
 				}
+				if(foundf==1)
+				{
+
+				
+				Speedc.point.x=estimated.at<float>(0);
+				Speedc.point.y=estimated.at<float>(1);
+				Speedc.point.z=estimated.at<float>(2);
+				Speedc.header.stamp=ros::Time::now();
+				}
+				else if(foundf==0)
+				{
+				Speedc.point.x=-0;
+				Speedc.point.y=-0;
+				Speedc.point.z=-0;
+				Speedc.header.stamp=ros::Time::now();
+
+				}*/
 				//printf("[%f	%f	%f] \n",posptavs.point.x,posptavs.point.y,posptavs.point.z);
 
-/*				posptav=Selection(pospt,posptc,foundf,foundc,kf,kfc,1);
-				//Speedav=Selection(Speedf,Speedc,foundf,foundc,kf,kfc,0);
-			
-				//Control=PID(punto,Speedav,Reference);
-				//ControlSaturado=Saturacion(Control);
-				if(foundtotal==1)
-				{
-				twist_msg.linear.x=ControlSaturado.at<float>(2);
-				//twist_msg.linear.y=0.0;
-				twist_msg.linear.y=ControlSaturado.at<float>(0);
-				//twist_msg.angular.z=ControlSaturado.at<float>(0);
-				twist_msg.linear.z=0.0;	
-				}
-				else
-				{
-				twist_msg.linear.x=0.0;
-				twist_msg.linear.y=0.0;
-				twist_msg.linear.z=0.0;
-				}
-				
-				printf("[%f	%f	%f] \n",twist_msg.linear.x,twist_msg.linear.y,twist_msg.linear.z);
-				twist_msg.linear.y=0.1*sin((double)ros::Time::now().toSec());
-				twist_msg.linear.x=0.0;
-				twist_msg.linear.z=0.0;
-				//printf("%d	%d \n",foundtotal,lost);
-				twist_msg.linear.x=ControlSaturado.at<float>(2);
-				twist_msg.linear.y=ControlSaturado.at<float>(0);
-				twist_msg.linear.z=ControlSaturado.at<float>(1);
-				sp.at<float>(0)=Speedav.x;
-				sp.at<float>(1)=Speedav.y;
-				sp.at<float>(2)=Speedav.z;
-				spe=Saturacion(sp);
-				twist_msg.linear.x=spe.at<float>(0);	
-				twist_msg.linear.y=spe.at<float>(1);
-				twist_msg.linear.z=spe.at<float>(2);*/
-
-			
-				//printf("[%f	%f	%f] \n",pospt.x,pospt.y,posptav.z);
-				//myfile <<posptav.x<<"	"<<posptc.x<<"	"<<pospt.x<<"	"<<posptav.y<<"	"<<posptc.y<<"	"<<pospt.y<<"	"<<posptav.z<<"	"<<posptc.z<<"	"<<pospt.z<<"	"<<twist_msg.linear.y<<"\n";
-				//myfile <<estimatedc.at<float>(3)<<"	"<<estimatedc.at<float>(4)<<"	"<<estimatedc.at<float>(5)<<"\n";				
+				posptav=Selection(pospt,posptc,foundf,foundc,kf,kfc,1);
+				posptavs.point.x=posptav.x;
+				posptavs.point.y=posptav.y;
+				posptavs.point.z=posptav.z;
+				printf("%f	%f	%f \n",posptavs.point.x,posptavs.point.y,posptavs.point.z);
+				posptavs.header.stamp=ros::Time::now();
 			pub_point.publish(posptavs);
 			pub_vel.publish(Speedc);
 			//pub_control.publish(twist_msg);
@@ -661,7 +639,7 @@ int main(int argc, char **argv)
 	distortion[4]=0;
 
 
-	float dt=0.07;//Dont know it yet
+	float dt=0.052;//Dont know it yet
 
 	//Feature Kalman Filter
 	//Transition Matrix A
